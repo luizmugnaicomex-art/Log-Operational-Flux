@@ -1,0 +1,109 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Space Grotesk", sans-serif;
+  --radius-xl: 24px;
+  --radius-2xl: 32px;
+  --radius-3xl: 40px;
+  --color-glass-surface: rgba(255, 255, 255, 0.4);
+  --color-glass-border: rgba(255, 255, 255, 0.3);
+  --shadow-glass: 0 20px 50px rgba(0, 0, 0, 0.05);
+  --shadow-bento: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+}
+
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: #f8fafc;
+    min-height: 100vh;
+    color: #1e293b;
+    position: relative;
+    overflow-x: hidden;
+}
+
+h1, h2, h3, h4, h5, .font-display {
+    font-family: 'Space Grotesk', sans-serif;
+}
+
+/* Atmospheric Background */
+body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: -1;
+    background: 
+        radial-gradient(circle at 10% 20%, rgba(224, 231, 255, 0.4) 0%, transparent 40%),
+        radial-gradient(circle at 90% 10%, rgba(254, 243, 199, 0.4) 0%, transparent 40%),
+        radial-gradient(circle at 80% 90%, rgba(220, 252, 231, 0.4) 0%, transparent 40%),
+        radial-gradient(circle at 20% 80%, rgba(250, 232, 255, 0.4) 0%, transparent 40%),
+        linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    opacity: 1;
+}
+
+/* Glassmorphism Utilities */
+.glass {
+    background: rgba(255, 255, 255, 0.55);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.05);
+}
+
+.glass-dark {
+    background: rgba(15, 23, 42, 0.08);
+    backdrop-filter: blur(12px) saturate(160%);
+    -webkit-backdrop-filter: blur(12px) saturate(160%);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.recharts-responsive-container {
+    min-height: 250px;
+}
+
+.dashboard-container {
+  width: 100%;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 32px;
+}
+
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 24px;
+}
+
+.chart-wrapper {
+  width: 100%;
+  min-height: 320px;
+}
+
+/* Class to hide elements during PPT/Print export */
+.is-exporting .no-export {
+    display: none !important;
+}
+
+/* Transitions */
+.view-transition {
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
