@@ -395,7 +395,7 @@ const VesselMatrix: React.FC<VesselMatrixProps> = ({ shipments }) => {
                 {uniqueVesselNames.map(v => <option key={v} value={v}>{v}</option>)}
               </select>
             </div>
-            <div className="flex flex-col gap-1.5 min-w-[140px] relative">
+            <div className="flex flex-col gap-1.5 min-w-[140px] relative z-50">
               <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-3">Process Status</label>
               <div 
                 className="bg-white/60 rounded-2xl px-4 py-2.5 text-xs font-bold text-slate-700 ring-1 ring-black/5 backdrop-blur-md cursor-pointer flex justify-between items-center"
@@ -406,7 +406,7 @@ const VesselMatrix: React.FC<VesselMatrixProps> = ({ shipments }) => {
               </div>
               
               {isStatusOpen && (
-                <div className="absolute top-full right-0 mt-2 bg-white rounded-2xl shadow-xl ring-1 ring-black/5 z-50 w-64 max-h-64 overflow-y-auto custom-scrollbar p-2">
+                <div className="absolute top-full right-0 mt-2 bg-white rounded-2xl shadow-xl ring-1 ring-black/5 z-[60] w-64 max-h-64 overflow-y-auto custom-scrollbar p-2">
                     <div 
                         className={`px-3 py-2 text-xs font-bold cursor-pointer rounded-xl ${selectedStatuses.length === 0 ? 'bg-indigo-50 text-indigo-700' : 'hover:bg-slate-50'}`}
                         onClick={() => { setSelectedStatuses([]); setIsStatusOpen(false); }}
