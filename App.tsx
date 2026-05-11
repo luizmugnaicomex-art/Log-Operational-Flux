@@ -12,17 +12,18 @@ import ChartDetailsModal from "./components/ChartDetailsModal";
 import OperationalLotGrid from "./components/OperationalLotGrid";
 import PipelineAnalysis from "./components/PipelineAnalysis";
 import GoodsAnalysis from "./components/GoodsAnalysis";
-import XYZAnalysis from "./components/XYZAnalysis";
 import { WarehouseStatusView } from "./components/WarehouseStatusView";
 import VesselMatrix from "./components/VesselMatrix";
 import { DemurrageControl } from "./components/DemurrageControl";
+import { CurrentInventory } from "./components/CurrentInventory";
+import { EmptyContainersPanel } from "./components/EmptyContainersPanel";
 
 // Utils
 import { processRawData, calculateDashboardData, toUTC, getISOWeek } from "./utils/dataProcessor";
 import { currencyFormatter } from "./utils/formatters";
 import { Shipment, SortConfig, PipelineWeek } from "./types";
 
-type MainView = "performance" | "goods_analysis" | "xyz_curve" | "warehouse_status" | "vessel_matrix" | "demurrage_control";
+type MainView = "performance" | "goods_analysis" | "current_inventory" | "warehouse_status" | "vessel_matrix" | "demurrage_control";
 
 const isValidDate = (d: any): d is Date => d instanceof Date && !isNaN(d.getTime());
 
@@ -41,6 +42,7 @@ function useDebounce<T>(value: T, delay: number): T {
 export default function App() {
   const [mainView, setMainView] = useState<MainView>("performance");
   const [mounted, setMounted] = useState(false);
+  const [isStoragePanelMinimized, setIsStoragePanelMinimized] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -578,10 +580,12 @@ export default function App() {
   };
 
   return (
-    <div className={`min-h-screen font-sans antialiased print:bg-white overflow-x-hidden ${isExporting ? 'is-exporting' : ''}`}>
-      {/* Premium Header / Sticky Dock */}
-      <header className="sticky top-0 z-[100] px-8 pt-6 no-export pointer-events-none">
-        <div className="mx-auto max-w-[1440px] flex items-center justify-between p-2 glass rounded-[2.5rem] ring-1 ring-white/40 shadow-2xl backdrop-blur-3xl pointer-events-auto">
+    <div className={`min-h-screen font-sans antialiased print:bg-white overflow-x-clip ${isExporting ? 'is-exporting' : ''}`}>
+      <div className="flex w-full min-h-screen">
+        <div className={`flex-1 w-full transition-all flex flex-col ${isExporting ? '' : isStoragePanelMinimized ? 'pr-[80px]' : '2xl:pr-[360px] pr-[360px]'}`}>
+          {/* Premium Header / Sticky Dock */}
+          <header className="sticky top-0 z-[100] px-8 pt-6 no-export pointer-events-none">
+            <div className="mx-auto max-w-[1440px] flex items-center justify-between p-2 glass rounded-[2.5rem] ring-1 ring-white/40 shadow-2xl backdrop-blur-3xl pointer-events-auto">
           <div className="flex items-center gap-6 pl-6">
             <div className="bg-indigo-600 w-12 h-12 rounded-[1.25rem] flex items-center justify-center shadow-lg shadow-indigo-200 ring-1 ring-white/20">
                <span className="material-icons text-white text-2xl">insights</span>
@@ -596,7 +600,7 @@ export default function App() {
             {[
               { id: 'performance', label: 'Dashboard', icon: 'grid_view' },
               { id: 'goods_analysis', label: 'Flow', icon: 'auto_graph' },
-              { id: 'xyz_curve', label: 'XYZ', icon: 'payments' },
+              { id: 'current_inventory', label: 'Stock', icon: 'warehouse' },
               { id: 'warehouse_status', label: 'Assets', icon: 'inventory_2' },
               { id: 'vessel_matrix', label: 'Maritime', icon: 'vessel' },
               { id: 'demurrage_control', label: 'Chronos', icon: 'schedule' }
@@ -719,8 +723,8 @@ export default function App() {
             </motion.div>
           ) : mainView === "goods_analysis" ? (
             <GoodsAnalysis data={charts} shipments={filteredShipments} />
-          ) : mainView === "xyz_curve" ? (
-            <XYZAnalysis data={charts} shipments={filteredShipments} />
+          ) : mainView === "current_inventory" ? (
+            <CurrentInventory shipments={filteredShipments} />
         ) : mainView === "warehouse_status" ? (
           <WarehouseStatusView 
             shipments={shipments} 
@@ -745,6 +749,9 @@ export default function App() {
         avgDrainRate={parseFloat(kpis.avgWeekdayVolume) || 1}
         onClose={() => setModalData(d => ({...d, isOpen: false}))} 
       />
+      </div>
+      {!isExporting && <EmptyContainersPanel isMinimized={isStoragePanelMinimized} onToggleMinimize={() => setIsStoragePanelMinimized(!isStoragePanelMinimized)} />}
+      </div>
     </div>
   );
 }
