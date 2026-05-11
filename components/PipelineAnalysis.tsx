@@ -69,7 +69,12 @@ const PipelineAnalysis: React.FC<PipelineAnalysisProps> = ({ data, onWeekClick }
                                     }}
                                     className="hover:bg-white/40 cursor-pointer transition-all group relative"
                                 >
-                                    <td className="px-8 py-6 font-black text-slate-800 text-sm tracking-tight">{week.period}</td>
+                                    <td className="px-8 py-6">
+                                        <div className="font-black text-slate-800 text-sm tracking-tight">{week.period}</div>
+                                        {week.dateRangeStr && (
+                                            <div className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-wider">{week.dateRangeStr}</div>
+                                        )}
+                                    </td>
                                     <td className="px-6 py-6 text-[11px] font-bold text-slate-500 max-w-[200px] truncate group-hover:text-indigo-600 transition-colors">
                                         {week.vessels.length > 0 ? week.vessels.join(', ') : 'N/A'}
                                     </td>

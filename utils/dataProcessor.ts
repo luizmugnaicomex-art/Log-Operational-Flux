@@ -86,6 +86,21 @@ export const getISOWeek = (date: Date) => {
     return { week: weekNo, year: d.getUTCFullYear() };
 };
 
+export const getWeekDateRangeStr = (week: number, year: number): string => {
+    const simple = new Date(Date.UTC(year, 0, 1 + (week - 1) * 7));
+    const dow = simple.getUTCDay() || 7;
+    const start = new Date(simple);
+    start.setUTCDate(simple.getUTCDate() - dow + 1);
+    
+    const end = new Date(start);
+    end.setUTCDate(start.getUTCDate() + 6);
+
+    const formatDay = (d: Date) => d.getUTCDate().toString().padStart(2, '0');
+    const getMonthStr = (d: Date) => ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getUTCMonth()];
+
+    return `${formatDay(start)} ${getMonthStr(start)} - ${formatDay(end)} ${getMonthStr(end)}`;
+};
+
 export const processRawData = (data: any[][]): { shipments: Shipment[], carriers: string[], analysts: string[], cargos: string[], containerTypes: string[], incoterms: string[], romaneioStatuses: string[], years: number[], statusComexList: string[], generalWarehouseList: string[] } => {
     const headerRow = data.find(row => Array.isArray(row) && row.some(cell => String(cell).toUpperCase().includes("SHIPPER")));
     if (!headerRow) throw new Error("Could not find a valid header row in the Excel file.");
@@ -493,6 +508,7 @@ export const calculateDashboardData = (shipments: Shipment[]): { kpis: KpiData, 
             if (!acc[key]) {
                 acc[key] = {
                     period: key,
+                    dateRangeStr: getWeekDateRangeStr(week, year),
                     vessels: [],
                     volume: 0,
                     deliveredCount: 0,

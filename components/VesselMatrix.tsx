@@ -9,7 +9,8 @@ interface VesselMatrixProps {
 
 const VesselMatrix: React.FC<VesselMatrixProps> = ({ shipments }) => {
   const [selectedVessels, setSelectedVessels] = useState<string[]>([]);
-  const [selectedStatus, setSelectedStatus] = useState<string>('');
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
+  const [isStatusOpen, setIsStatusOpen] = useState(false);
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
 
@@ -47,7 +48,7 @@ const VesselMatrix: React.FC<VesselMatrixProps> = ({ shipments }) => {
 
   const handleClearFilters = () => {
     setSelectedVessels([]);
-    setSelectedStatus('');
+    setSelectedStatuses([]);
     setStartDate('');
     setEndDate('');
   };
@@ -59,9 +60,9 @@ const VesselMatrix: React.FC<VesselMatrixProps> = ({ shipments }) => {
         if (!vName || !selectedVessels.includes(vName)) return false;
       }
 
-      if (selectedStatus) {
+      if (selectedStatuses.length > 0) {
         const status = (s.statusComex?.trim().toUpperCase()) || (s.status?.trim().toUpperCase()) || "UNKNOWN STATUS";
-        if (status !== selectedStatus) return false;
+        if (!selectedStatuses.includes(status)) return false;
       }
       
       if (startDate || endDate) {
@@ -82,7 +83,7 @@ const VesselMatrix: React.FC<VesselMatrixProps> = ({ shipments }) => {
       
       return true;
     });
-  }, [shipments, selectedVessels, startDate, endDate, selectedStatus]);
+  }, [shipments, selectedVessels, startDate, endDate, selectedStatuses]);
 
   const matrixData = useMemo<VesselMatrixData>(() => {
     return calculateVesselMatrix(filteredShipments);
@@ -394,16 +395,38 @@ const VesselMatrix: React.FC<VesselMatrixProps> = ({ shipments }) => {
                 {uniqueVesselNames.map(v => <option key={v} value={v}>{v}</option>)}
               </select>
             </div>
-            <div className="flex flex-col gap-1.5 min-w-[140px]">
+            <div className="flex flex-col gap-1.5 min-w-[140px] relative">
               <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-3">Process Status</label>
-              <select 
-                className="bg-white/60 border-none rounded-2xl px-4 py-2.5 text-xs font-bold text-slate-700 ring-1 ring-black/5 focus:ring-indigo-500 focus:outline-none backdrop-blur-md"
-                value={selectedStatus}
-                onChange={(e) => setSelectedStatus(e.target.value)}
+              <div 
+                className="bg-white/60 rounded-2xl px-4 py-2.5 text-xs font-bold text-slate-700 ring-1 ring-black/5 backdrop-blur-md cursor-pointer flex justify-between items-center"
+                onClick={() => setIsStatusOpen(!isStatusOpen)}
               >
-                <option value="">Full Lifecycle</option>
-                {uniqueStatusesTotal.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
+                  <span className="truncate">{selectedStatuses.length === 0 ? "Full Lifecycle" : `${selectedStatuses.length} Selected`}</span>
+                  <span className="material-icons text-sm">{isStatusOpen ? 'expand_less' : 'expand_more'}</span>
+              </div>
+              
+              {isStatusOpen && (
+                <div className="absolute top-full right-0 mt-2 bg-white rounded-2xl shadow-xl ring-1 ring-black/5 z-50 w-64 max-h-64 overflow-y-auto custom-scrollbar p-2">
+                    <div 
+                        className={`px-3 py-2 text-xs font-bold cursor-pointer rounded-xl ${selectedStatuses.length === 0 ? 'bg-indigo-50 text-indigo-700' : 'hover:bg-slate-50'}`}
+                        onClick={() => { setSelectedStatuses([]); setIsStatusOpen(false); }}
+                    >
+                        Full Lifecycle
+                    </div>
+                    {uniqueStatusesTotal.map(s => (
+                        <div 
+                           key={s}
+                           className={`px-3 py-2 text-xs cursor-pointer rounded-xl flex items-center justify-between ${selectedStatuses.includes(s) ? 'bg-indigo-50 text-indigo-700 font-bold' : 'hover:bg-slate-50'}`}
+                           onClick={() => {
+                               setSelectedStatuses(prev => prev.includes(s) ? prev.filter(p => p !== s) : [...prev, s]);
+                           }}
+                        >
+                           {s}
+                           {selectedStatuses.includes(s) && <span className="material-icons text-sm">check</span>}
+                        </div>
+                    ))}
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-4 bg-white/40 p-2 rounded-2xl ring-1 ring-black/5">
                <input 
@@ -420,7 +443,7 @@ const VesselMatrix: React.FC<VesselMatrixProps> = ({ shipments }) => {
                  onChange={(e) => setEndDate(e.target.value)}
                />
             </div>
-            {(selectedVessels.length > 0 || selectedStatus || startDate || endDate) && (
+            {(selectedVessels.length > 0 || selectedStatuses.length > 0 || startDate || endDate) && (
               <button 
                 onClick={handleClearFilters}
                 className="w-10 h-10 rounded-full bg-red-50 text-red-500 flex items-center justify-center hover:bg-red-500 hover:text-white transition-all shadow-sm shadow-red-100"
