@@ -123,6 +123,7 @@ export interface Shipment {
 
 export interface PipelineWeek {
     period: string; 
+    dateRangeStr?: string;
     vessels: string[];
     volume: number;
     deliveredCount: number;
