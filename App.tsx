@@ -17,13 +17,14 @@ import VesselMatrix from "./components/VesselMatrix";
 import { DemurrageControl } from "./components/DemurrageControl";
 import { CurrentInventory } from "./components/CurrentInventory";
 import { EmptyContainersPanel } from "./components/EmptyContainersPanel";
+import PortYardOperationStatus from "./components/PortYardOperationStatus";
 
 // Utils
 import { processRawData, calculateDashboardData, toUTC, getISOWeek } from "./utils/dataProcessor";
 import { currencyFormatter } from "./utils/formatters";
 import { Shipment, SortConfig, PipelineWeek } from "./types";
 
-type MainView = "performance" | "goods_analysis" | "current_inventory" | "warehouse_status" | "vessel_matrix" | "demurrage_control";
+type MainView = "performance" | "goods_analysis" | "current_inventory" | "warehouse_status" | "vessel_matrix" | "demurrage_control" | "port_yard_status";
 
 const isValidDate = (d: any): d is Date => d instanceof Date && !isNaN(d.getTime());
 
@@ -603,7 +604,8 @@ export default function App() {
               { id: 'current_inventory', label: 'Stock', icon: 'warehouse' },
               { id: 'warehouse_status', label: 'Assets', icon: 'inventory_2' },
               { id: 'vessel_matrix', label: 'Maritime', icon: 'vessel' },
-              { id: 'demurrage_control', label: 'Chronos', icon: 'schedule' }
+              { id: 'demurrage_control', label: 'Chronos', icon: 'schedule' },
+              { id: 'port_yard_status', label: 'Port & Yard', icon: 'precision_manufacturing' }
             ].map((item) => (
               <button
                 key={item.id}
@@ -737,6 +739,8 @@ export default function App() {
           </div>
         ) : mainView === "demurrage_control" ? (
           <DemurrageControl shipments={filteredShipments} />
+        ) : mainView === "port_yard_status" ? (
+          <PortYardOperationStatus shipments={filteredShipments} />
         ) : null}
         </AnimatePresence>
       </main>

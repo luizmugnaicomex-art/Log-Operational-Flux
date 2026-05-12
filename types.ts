@@ -319,3 +319,45 @@ export interface WarehouseContract {
   scanningFee: number;
   insurancePct: number;
 }
+
+export interface PortOperationData {
+  name: string;
+  nameCN: string;
+  value: number;
+}
+
+export interface YardInventoryData {
+  name: string;
+  Capacity: number;
+  Occupied: number;
+  Available: number;
+}
+
+export interface TransportReleaseData {
+  name: string;
+  Transferred: number;
+  Invoiced: number;
+  Released: number;
+  Total: number;
+}
+
+export interface DailyOperationTrend {
+  name: string;
+  TEGMA: number;
+  GABARDO: number;
+  BRAZUL: number;
+  TRANSILVA: number;
+  Total: number;
+}
+
+export interface PortYardDashboardData {
+  portOperationData: PortOperationData[];
+  portDistData: Array<{ name: string; value: number; fill: string }>;
+  yardSlotData: YardInventoryData[];
+  containerAgingData: Array<{ name: string; d1_7: number; d8_15: number; d16_30: number; d30plus: number }>;
+  overdueAnalysisData: Array<{ name: string; quantity: number; proportion: number }>;
+  transportReleaseData: TransportReleaseData[];
+  transportTypeData: Array<{ name: string; value: number; fill: string }>;
+  dailyTrendData: DailyOperationTrend[];
+  modelTotals: Record<string, number>;
+}

@@ -1,6 +1,8 @@
 
-import { Shipment, KpiData, ChartData, PipelineWeek } from '../types';
+import { Shipment, KpiData, ChartData, PipelineWeek, PortYardDashboardData } from '../types';
 import { estimateFinancialExposure } from './financials';
+
+const avg = (arr: number[]): number => arr.length === 0 ? 0 : arr.reduce((a, b) => a + b, 0) / arr.length;
 
 const DAILY_GOAL_TARGET = 150;
 const GATE_CAPACITY_DAY = 170;
@@ -403,7 +405,148 @@ export const processRawData = (data: any[][]): { shipments: Shipment[], carriers
     };
 };
 
-const avg = (arr: number[]) => arr.length ? (arr.reduce((a, b) => a + b, 0) / arr.length) : 0;
+
+export const calculatePortYardOperationData = (shipments: Shipment[]): PortYardDashboardData => {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  let received = 0, released = 0, emptyReturned = 0, cleared = 0, yardTransfers = 0, trucksWaiting = 0;
+  let statusImport = 0, statusExport = 0, statusEmpty = 0, statusFull = 0, statusHold = 0, statusReleased = 0;
+  
+  const yardCounts: Record<string, number> = { 'TEGMA': 0, 'GABARDO': 0, 'BRAZUL': 0, 'TRANSILVA': 0, 'OTHER': 0 };
+  const capacities: Record<string, number> = { 'TEGMA': 6880, 'GABARDO': 7000, 'BRAZUL': 2000, 'TRANSILVA': 600 };
+  
+  const agingData: Record<string, { d1_7: number, d8_15: number, d16_30: number, d30plus: number }> = {
+    '20DC': { d1_7: 0, d8_15: 0, d16_30: 0, d30plus: 0 },
+    '40DC': { d1_7: 0, d8_15: 0, d16_30: 0, d30plus: 0 },
+    '40HC': { d1_7: 0, d8_15: 0, d16_30: 0, d30plus: 0 },
+    'Reefer': { d1_7: 0, d8_15: 0, d16_30: 0, d30plus: 0 },
+    'Empty': { d1_7: 0, d8_15: 0, d16_30: 0, d30plus: 0 },
+    'Other': { d1_7: 0, d8_15: 0, d16_30: 0, d30plus: 0 },
+  };
+
+  const overdueTotals = { d1_7: 0, d8_15: 0, d16_30: 0, d30plus: 0 };
+  let totalAging = 0;
+  
+  const releaseByModel: Record<string, { transferred: number, invoiced: number, released: number, total: number }> = {};
+  const transportType: Record<string, number> = { 'Internal Fleet': 0, 'Outsourced': 0, 'Dedicated Fleet': 0, 'Emergency Trans.': 0 };
+  const dailyMap: Record<string, { TEGMA: number, GABARDO: number, BRAZUL: number, TRANSILVA: number, Total: number }> = {};
+  const modelTotals: Record<string, number> = {};
+
+  const getDaysBetween = (start: Date | null, end: Date | null) => start && end ? Math.floor((end.getTime() - start.getTime()) / (1000 * 3600 * 24)) : 0;
+
+  shipments.forEach(s => {
+    if(s.ata) received++;
+    if(s.dateNF) released++;
+    if(s.actualDepotReturnDate) emptyReturned++;
+    if(s.channelDate) cleared++;
+    if(s.unloadDate) yardTransfers++;
+    
+    const statusUpper = `${s.status} ${s.statusComex}`.toUpperCase();
+    if(statusUpper.includes('WAIT') || statusUpper.includes('AG -')) trucksWaiting++;
+
+    const isExport = s.voyage && s.voyage.toUpperCase().includes('OUT');
+    if (isExport) statusExport++; else statusImport++;
+    const isEmpt = s.cargo && s.cargo.toUpperCase().includes('EMPTY');
+    if (isEmpt) statusEmpty++; else statusFull++;
+
+    if (s.parametrization && s.parametrization !== 'Verde' && !s.channelDate) statusHold++;
+    if (s.channelDate) statusReleased++;
+
+    if (!s.deliveryByd && s.ata) {
+      const wh = s.bondedWarehouse?.toUpperCase() || s.generalWarehouse?.toUpperCase() || '';
+      let matchedWh = 'OTHER';
+      if (wh.includes('TEGMA')) matchedWh = 'TEGMA';
+      else if (wh.includes('GABARDO')) matchedWh = 'GABARDO';
+      else if (wh.includes('BRAZUL')) matchedWh = 'BRAZUL';
+      else if (wh.includes('TRANSILVA')) matchedWh = 'TRANSILVA';
+      yardCounts[matchedWh] = (yardCounts[matchedWh] || 0) + 1;
+
+      const days = getDaysBetween(s.ata, today);
+      let ctType = 'Other';
+      const rawType = (s.containerType || '').toUpperCase();
+      if (rawType.includes('20')) ctType = '20DC';
+      else if (rawType.includes('40')) { ctType = rawType.includes('HC') ? '40HC' : '40DC'; }
+      else if (rawType.includes('RH') || rawType.includes('REEFER')) ctType = 'Reefer';
+      if (isEmpt) ctType = 'Empty';
+
+      if (!agingData[ctType]) agingData[ctType] = { d1_7: 0, d8_15: 0, d16_30: 0, d30plus: 0 };
+      if (days <= 7) { agingData[ctType].d1_7++; overdueTotals.d1_7++; }
+      else if (days <= 15) { agingData[ctType].d8_15++; overdueTotals.d8_15++; }
+      else if (days <= 30) { agingData[ctType].d16_30++; overdueTotals.d16_30++; }
+      else { agingData[ctType].d30plus++; overdueTotals.d30plus++; }
+      totalAging++;
+    }
+
+    const model = s.cargoModel || 'OTHER';
+    if (!releaseByModel[model]) releaseByModel[model] = { transferred: 0, invoiced: 0, released: 0, total: 0 };
+    releaseByModel[model].total++;
+    if (s.dateNF) releaseByModel[model].invoiced++;
+    else if (s.channelDate) releaseByModel[model].released++;
+    else releaseByModel[model].transferred++;
+
+    const carrier = (s.carrier || '').toUpperCase();
+    if (carrier.includes('TEGMA') || carrier.includes('GABARDO')) transportType['Dedicated Fleet']++;
+    else if (carrier.includes('INTERNAL')) transportType['Internal Fleet']++;
+    else transportType['Outsourced']++;
+
+    const actionDate = s.deliveryByd || s.ata;
+    if (actionDate) {
+      const label = `${actionDate.getMonth()+1}/${actionDate.getDate()}`;
+      if (!dailyMap[label]) dailyMap[label] = { TEGMA: 0, GABARDO: 0, BRAZUL: 0, TRANSILVA: 0, Total: 0 };
+      if (s.bondedWarehouse?.toUpperCase().includes('TEGMA')) dailyMap[label].TEGMA++;
+      else if (s.bondedWarehouse?.toUpperCase().includes('GABARDO')) dailyMap[label].GABARDO++;
+      else if (s.bondedWarehouse?.toUpperCase().includes('BRAZUL')) dailyMap[label].BRAZUL++;
+      else if (s.bondedWarehouse?.toUpperCase().includes('TRANSILVA')) dailyMap[label].TRANSILVA++;
+      dailyMap[label].Total++;
+    }
+
+    if(s.cargoModel && actionDate) modelTotals[model] = (modelTotals[model] || 0) + 1;
+  });
+
+  return {
+    portOperationData: [
+      { name: 'Containers Received', nameCN: '收柜量', value: received },
+      { name: 'Containers Released', nameCN: '放行量', value: released },
+      { name: 'Empty Returned', nameCN: '空箱返还', value: emptyReturned },
+      { name: 'Customs Cleared', nameCN: '已清关', value: cleared },
+      { name: 'Yard Transfers', nameCN: '堆场调拨', value: yardTransfers },
+      { name: 'Trucks Waiting', nameCN: '排队卡车', value: trucksWaiting },
+    ],
+    portDistData: [
+      { name: 'Import / 进口', value: statusImport, fill: '#7DA1D5' },
+      { name: 'Export / 出口', value: statusExport, fill: '#4E79C4' },
+      { name: 'Empty / 空箱', value: statusEmpty, fill: '#6D9EEB' },
+      { name: 'Full / 重箱', value: statusFull, fill: '#C0504D' },
+      { name: 'Customs Hold / 海关扣留', value: statusHold, fill: '#9BBB59' },
+      { name: 'Released / 已放行', value: statusReleased, fill: '#8064A2' },
+    ],
+    yardSlotData: ['TEGMA', 'GABARDO', 'BRAZUL', 'TRANSILVA'].map(name => ({
+      name, Capacity: capacities[name], Occupied: yardCounts[name] || 0, Available: Math.max(0, capacities[name] - (yardCounts[name] || 0))
+    })),
+    containerAgingData: ['20DC', '40DC', '40HC', 'Reefer', 'Empty'].map(name => ({ name, ...agingData[name] })),
+    overdueAnalysisData: [
+      { name: '1-7 Days', quantity: overdueTotals.d1_7, proportion: totalAging ? parseFloat(((overdueTotals.d1_7 / totalAging)*100).toFixed(2)) : 0 },
+      { name: '8-15 Days', quantity: overdueTotals.d8_15, proportion: totalAging ? parseFloat(((overdueTotals.d8_15 / totalAging)*100).toFixed(2)) : 0 },
+      { name: '16-30 Days', quantity: overdueTotals.d16_30, proportion: totalAging ? parseFloat(((overdueTotals.d16_30 / totalAging)*100).toFixed(2)) : 0 },
+      { name: '30+ Days', quantity: overdueTotals.d30plus, proportion: totalAging ? parseFloat(((overdueTotals.d30plus / totalAging)*100).toFixed(2)) : 0 },
+    ],
+    transportReleaseData: Object.keys(releaseByModel).sort((a,b) => releaseByModel[b].total - releaseByModel[a].total).slice(0, 4).map(name => ({
+      name, Transferred: releaseByModel[name].transferred, Invoiced: releaseByModel[name].invoiced, Released: releaseByModel[name].released, Total: releaseByModel[name].total
+    })),
+    transportTypeData: [
+      { name: 'Internal Fleet / 内部车队', value: transportType['Internal Fleet'], fill: '#4E79C4' },
+      { name: 'Outsourced / 外包', value: transportType['Outsourced'], fill: '#8064A2' },
+      { name: 'Dedicated Fleet / 专线车队', value: transportType['Dedicated Fleet'], fill: '#7DA1D5' },
+      { name: 'Emergency Trans. / 紧急运输', value: transportType['Emergency Trans.'], fill: '#C0504D' },
+    ],
+    dailyTrendData: Object.keys(dailyMap).map(k => {
+      const parts = k.split('/');
+      return { name: k, month: parseInt(parts[0]), day: parseInt(parts[1]), ...dailyMap[k] };
+    }).sort((a, b) => b.month !== a.month ? a.month - b.month : a.day - b.day).slice(-15),
+    modelTotals: modelTotals
+  };
+};
 
 export const calculateDashboardData = (shipments: Shipment[]): { kpis: KpiData, charts: ChartData } => {
     const totalShipments = shipments.length;

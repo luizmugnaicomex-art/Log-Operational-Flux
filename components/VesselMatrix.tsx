@@ -10,9 +10,22 @@ interface VesselMatrixProps {
 const VesselMatrix: React.FC<VesselMatrixProps> = ({ shipments }) => {
   const [selectedVessels, setSelectedVessels] = useState<string[]>([]);
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
+  const [selectedIncoterms, setSelectedIncoterms] = useState<string[]>([]);
   const [isStatusOpen, setIsStatusOpen] = useState(false);
+  const [isIncotermsOpen, setIsIncotermsOpen] = useState(false);
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
+  
+  const [observations, setObservations] = useState<Record<string, string>>(() => {
+    const saved = localStorage.getItem('vesselObservations');
+    return saved ? JSON.parse(saved) : {};
+  });
+
+  const handleObservationChange = (vessel: string, value: string) => {
+    const newObservations = { ...observations, [vessel]: value };
+    setObservations(newObservations);
+    localStorage.setItem('vesselObservations', JSON.stringify(newObservations));
+  };
 
   type ModalViewConfig = {
     type: 'grand_total' | 'vessel_total' | 'vessel_status' | 'vessel_warehouse' | 'grand_status' | 'grand_warehouse' | 'terminal_summary';
@@ -46,9 +59,15 @@ const VesselMatrix: React.FC<VesselMatrixProps> = ({ shipments }) => {
     return Array.from(statuses).sort() as string[];
   }, [shipments]);
 
+  const uniqueIncoterms = useMemo(() => {
+    const incoterms = new Set(shipments.map(s => s.incoterm?.trim().toUpperCase()).filter(i => i));
+    return Array.from(incoterms).sort() as string[];
+  }, [shipments]);
+
   const handleClearFilters = () => {
     setSelectedVessels([]);
     setSelectedStatuses([]);
+    setSelectedIncoterms([]);
     setStartDate('');
     setEndDate('');
   };
@@ -63,6 +82,11 @@ const VesselMatrix: React.FC<VesselMatrixProps> = ({ shipments }) => {
       if (selectedStatuses.length > 0) {
         const status = (s.statusComex?.trim().toUpperCase()) || (s.status?.trim().toUpperCase()) || "UNKNOWN STATUS";
         if (!selectedStatuses.includes(status)) return false;
+      }
+
+      if (selectedIncoterms.length > 0) {
+        const incoterm = (s.incoterm?.trim().toUpperCase()) || "UNKNOWN INCOTERM";
+        if (!selectedIncoterms.includes(incoterm)) return false;
       }
       
       if (startDate || endDate) {
@@ -83,7 +107,7 @@ const VesselMatrix: React.FC<VesselMatrixProps> = ({ shipments }) => {
       
       return true;
     });
-  }, [shipments, selectedVessels, startDate, endDate, selectedStatuses]);
+  }, [shipments, selectedVessels, startDate, endDate, selectedStatuses, selectedIncoterms]);
 
   const matrixData = useMemo<VesselMatrixData>(() => {
     return calculateVesselMatrix(filteredShipments);
@@ -428,6 +452,41 @@ const VesselMatrix: React.FC<VesselMatrixProps> = ({ shipments }) => {
                 </div>
               )}
             </div>
+            
+            <div className="flex flex-col gap-1.5 min-w-[140px] relative z-50">
+              <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-3">Incoterms</label>
+              <div 
+                className="bg-white/60 rounded-2xl px-4 py-2.5 text-xs font-bold text-slate-700 ring-1 ring-black/5 backdrop-blur-md cursor-pointer flex justify-between items-center"
+                onClick={() => setIsIncotermsOpen(!isIncotermsOpen)}
+              >
+                  <span className="truncate">{selectedIncoterms.length === 0 ? "All Incoterms" : `${selectedIncoterms.length} Selected`}</span>
+                  <span className="material-icons text-sm">{isIncotermsOpen ? 'expand_less' : 'expand_more'}</span>
+              </div>
+              
+              {isIncotermsOpen && (
+                <div className="absolute top-full right-0 mt-2 bg-white rounded-2xl shadow-xl ring-1 ring-black/5 z-[60] w-64 max-h-64 overflow-y-auto custom-scrollbar p-2">
+                    <div 
+                        className={`px-3 py-2 text-xs font-bold cursor-pointer rounded-xl ${selectedIncoterms.length === 0 ? 'bg-indigo-50 text-indigo-700' : 'hover:bg-slate-50'}`}
+                        onClick={() => { setSelectedIncoterms([]); setIsIncotermsOpen(false); }}
+                    >
+                        All Incoterms
+                    </div>
+                    {uniqueIncoterms.map(i => (
+                        <div 
+                           key={i}
+                           className={`px-3 py-2 text-xs cursor-pointer rounded-xl flex items-center justify-between ${selectedIncoterms.includes(i) ? 'bg-indigo-50 text-indigo-700 font-bold' : 'hover:bg-slate-50'}`}
+                           onClick={() => {
+                               setSelectedIncoterms(prev => prev.includes(i) ? prev.filter(p => p !== i) : [...prev, i]);
+                           }}
+                        >
+                           {i}
+                           {selectedIncoterms.includes(i) && <span className="material-icons text-sm">check</span>}
+                        </div>
+                    ))}
+                </div>
+              )}
+            </div>
+
             <div className="flex items-center gap-4 bg-white/40 p-2 rounded-2xl ring-1 ring-black/5">
                <input 
                  type="date" 
@@ -443,7 +502,7 @@ const VesselMatrix: React.FC<VesselMatrixProps> = ({ shipments }) => {
                  onChange={(e) => setEndDate(e.target.value)}
                />
             </div>
-            {(selectedVessels.length > 0 || selectedStatuses.length > 0 || startDate || endDate) && (
+            {(selectedVessels.length > 0 || selectedStatuses.length > 0 || selectedIncoterms.length > 0 || startDate || endDate) && (
               <button 
                 onClick={handleClearFilters}
                 className="w-10 h-10 rounded-full bg-red-50 text-red-500 flex items-center justify-center hover:bg-red-500 hover:text-white transition-all shadow-sm shadow-red-100"
@@ -527,8 +586,15 @@ const VesselMatrix: React.FC<VesselMatrixProps> = ({ shipments }) => {
                   transition={{ delay: idx * 0.05 }}
                   className="hover:bg-indigo-50/30 transition-colors group"
                 >
-                  <td className="px-6 py-4 font-display font-black text-sm text-slate-800 sticky left-0 bg-white z-10 border-r border-slate-100 shadow-[2px_0_10px_rgba(0,0,0,0.02)] group-hover:text-indigo-600 transition-colors">
+                  <td className="px-6 py-4 font-display font-black text-sm text-slate-800 sticky left-0 bg-white z-10 border-r border-slate-100 shadow-[2px_0_10px_rgba(0,0,0,0.02)] group-hover:text-indigo-600 transition-colors flex flex-col items-start gap-1">
                     {row.vessel}
+                    <input
+                      type="text"
+                      placeholder="Add observation..."
+                      className="text-[9px] font-bold text-slate-500 bg-slate-100 rounded-lg px-2 py-1 w-full border-none focus:ring-1 focus:ring-indigo-500/50"
+                      value={observations[row.vessel] || ''}
+                      onChange={(e) => handleObservationChange(row.vessel, e.target.value)}
+                    />
                   </td>
                   <td className="px-6 py-4 text-xs font-bold text-slate-400 whitespace-nowrap border-r border-slate-100 text-center">
                     {formatDate(row.eta)}
