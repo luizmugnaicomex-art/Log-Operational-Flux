@@ -548,6 +548,76 @@ export const calculatePortYardOperationData = (shipments: Shipment[]): PortYardD
   };
 };
 
+export const generateMarineFluxMatrix = (shipments: Shipment[]) => {
+    const locations = [
+        { section: 'BONDED', name: 'TECON', match: ['TECON', 'WILSON', 'TECOM'] },
+        { section: 'BONDED', name: 'INTERMARITIMA', match: ['INTERMARITIMA', 'INTER ARCO', 'INTERMAR'] },
+        { section: 'BONDED', name: 'TPC', match: ['TPC'] },
+        { section: 'BONDED', name: 'CLIA EMPORIO', match: ['CLIA', 'EMPORIO'] },
+        { section: 'WAREHOUSE', name: 'AG - INTER CDEX', match: ['CDEX', 'AG -', 'SEDEX'] },
+        { section: 'WAREHOUSE', name: 'TERCAM', match: ['TERCAM', 'BUFFER'] },
+        { section: 'WAREHOUSE', name: 'TPC P5', match: ['P5'] },
+        { section: 'WAREHOUSE', name: 'CTS - PONTUAL', match: ['PONTUAL'] },
+        { section: 'BUFFER', name: 'BYD', match: ['BYD'] },
+    ];
+
+    const columns = [
+        'IN TRANSIT',
+        'AT THE PORT',
+        'CARGO PRESENCE',
+        'REGISTERED IMPORT DECLARATION',
+        'CARGO CLEARED',
+        'CARGO READY',
+        'CARGO DELIVERED'
+    ];
+
+    const matrix = locations.map(loc => {
+        const row: any = { Section: loc.section, Name: loc.name };
+        columns.forEach(col => row[col] = 0);
+
+        shipments.forEach(s => {
+            const bw = (s.bondedWarehouse || '').toUpperCase();
+            const gw = (s.generalWarehouse || '').toUpperCase();
+            
+            // Priority check: bonded warehouse usually defines the primary location
+            const matches = loc.match.some(m => bw.includes(m) || gw.includes(m));
+
+            if (matches) {
+                const status = (s.statusComex || s.status || '').toUpperCase();
+                
+                // Determine status column logically (hierarchical priority)
+                if (s.deliveryByd) {
+                    row['CARGO DELIVERED']++;
+                } else if (s.cargoReadyDate) {
+                    row['CARGO READY']++;
+                } else if (s.dateNF || s.channelDate || status.includes('CLEARED') || status.includes('LIBERADO') || status.includes('DONE')) {
+                    row['CARGO CLEARED']++;
+                } else if (s.lotNumber && s.lotNumber !== 'N/A' && s.lotNumber !== '0' && s.lotNumber !== '') {
+                    row['REGISTERED IMPORT DECLARATION']++;
+                } else if (s.cargoPresence && s.cargoPresence.toUpperCase().includes('YES')) {
+                    row['CARGO PRESENCE']++;
+                } else if (s.ata) {
+                    row['AT THE PORT']++;
+                } else if (status.includes('MAR') || status.includes('TRANSIT')) {
+                    row['IN TRANSIT']++;
+                } else {
+                    row['IN TRANSIT']++;
+                }
+            }
+        });
+        return row;
+    });
+
+    // Generate CSV
+    const header = ['Section', 'Name', ...columns];
+    const csvContent = [
+        header.join(','),
+        ...matrix.map(row => header.map(col => row[col]).join(','))
+    ].join('\n');
+
+    return csvContent;
+};
+
 export const calculateDashboardData = (shipments: Shipment[]): { kpis: KpiData, charts: ChartData } => {
     const totalShipments = shipments.length;
     const deliveredShipments = shipments.filter(s => s.deliveryByd !== null);

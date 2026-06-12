@@ -294,12 +294,15 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
         });
 
         // Extend periods if there is still a backlog
-        if (backlog > 0) {
-            let lastPeriod = result[result.length - 1].period;
-            let [weekStr, yearStr] = lastPeriod.split(' - ');
-            let week = parseInt(weekStr.replace('W', ''));
-            let year = parseInt(yearStr);
-            let cumulativeArrivals = result[result.length - 1].cumulativeArrivals;
+        if (backlog > 0 && result.length > 0) {
+            const lastItem = result[result.length - 1];
+            const lastPeriod = lastItem ? lastItem.period : "W1 - 2026";
+            const parts = lastPeriod.split(' - ');
+            let weekStr = parts[0] || "W1";
+            let yearStr = parts[1] || "2026";
+            let week = parseInt(weekStr.replace('W', '')) || 1;
+            let year = parseInt(yearStr) || 2026;
+            let cumulativeArrivals = lastItem ? lastItem.cumulativeArrivals : 0;
 
             let safetyCounter = 0;
             while (backlog > 0 && safetyCounter < 52) {

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Shipment, VesselMatrixData } from '../types';
-import { calculateVesselMatrix } from '../utils/dataProcessor';
+import { calculateVesselMatrix, generateMarineFluxMatrix } from '../utils/dataProcessor';
 
 interface VesselMatrixProps {
   shipments: Shipment[];
@@ -319,6 +319,20 @@ const VesselMatrix: React.FC<VesselMatrixProps> = ({ shipments }) => {
     return date.toLocaleDateString('en-GB'); // dd/mm/yyyy
   };
 
+  const handleExportMatrix = () => {
+    if (!shipments || shipments.length === 0) return;
+    const csv = generateMarineFluxMatrix(shipments);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `Marine_Flux_Matrix_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
@@ -400,7 +414,16 @@ const VesselMatrix: React.FC<VesselMatrixProps> = ({ shipments }) => {
       <div className="glass p-12 rounded-[3.5rem] ring-1 ring-white/40 shadow-glass min-h-[600px] flex flex-col">
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-10 mb-12">
           <div>
-            <h2 className="text-4xl font-display font-black text-slate-800 tracking-[-0.04em]">Maritime <span className="text-indigo-600">Flux</span> Matrix</h2>
+            <div className="flex items-center gap-4">
+              <h2 className="text-4xl font-display font-black text-slate-800 tracking-[-0.04em]">Maritime <span className="text-indigo-600">Flux</span> Matrix</h2>
+              <button 
+                  onClick={handleExportMatrix}
+                  className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full text-[10px] font-black uppercase tracking-widest transition-all shadow-lg active:scale-95"
+              >
+                  <span className="material-icons text-base">download</span>
+                  Extract Matrix
+              </button>
+            </div>
             <p className="text-slate-400 font-bold mt-3 tracking-widest text-[11px] uppercase opacity-60">Deep Sea Strategy & Arrival Convergence</p>
           </div>
 

@@ -18,13 +18,15 @@ import { DemurrageControl } from "./components/DemurrageControl";
 import { CurrentInventory } from "./components/CurrentInventory";
 import { EmptyContainersPanel } from "./components/EmptyContainersPanel";
 import PortYardOperationStatus from "./components/PortYardOperationStatus";
+import BydExecReporter from "./components/BydExecReporter";
+import BydSeniorKpis from "./components/BydSeniorKpis";
 
 // Utils
 import { processRawData, calculateDashboardData, toUTC, getISOWeek } from "./utils/dataProcessor";
 import { currencyFormatter } from "./utils/formatters";
 import { Shipment, SortConfig, PipelineWeek } from "./types";
 
-type MainView = "performance" | "goods_analysis" | "current_inventory" | "warehouse_status" | "vessel_matrix" | "demurrage_control" | "port_yard_status";
+type MainView = "performance" | "goods_analysis" | "current_inventory" | "warehouse_status" | "vessel_matrix" | "demurrage_control" | "port_yard_status" | "exec_reporter" | "byd_kpis";
 
 const isValidDate = (d: any): d is Date => d instanceof Date && !isNaN(d.getTime());
 
@@ -605,7 +607,9 @@ export default function App() {
               { id: 'warehouse_status', label: 'Assets', icon: 'inventory_2' },
               { id: 'vessel_matrix', label: 'Maritime', icon: 'vessel' },
               { id: 'demurrage_control', label: 'Chronos', icon: 'schedule' },
-              { id: 'port_yard_status', label: 'Port & Yard', icon: 'precision_manufacturing' }
+              { id: 'port_yard_status', label: 'Port & Yard', icon: 'precision_manufacturing' },
+              { id: 'exec_reporter', label: 'BYD Exec Plan', icon: 'assignment' },
+              { id: 'byd_kpis', label: 'BYD Senior KPI', icon: 'insights' }
             ].map((item) => (
               <button
                 key={item.id}
@@ -741,6 +745,10 @@ export default function App() {
           <DemurrageControl shipments={filteredShipments} />
         ) : mainView === "port_yard_status" ? (
           <PortYardOperationStatus shipments={filteredShipments} />
+        ) : mainView === "exec_reporter" ? (
+          <BydExecReporter shipments={filteredShipments} />
+        ) : mainView === "byd_kpis" ? (
+          <BydSeniorKpis shipments={filteredShipments} />
         ) : null}
         </AnimatePresence>
       </main>
