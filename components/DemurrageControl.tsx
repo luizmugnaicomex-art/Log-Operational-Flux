@@ -288,9 +288,17 @@ export const DemurrageControl: React.FC<{ shipments: Shipment[] }> = ({ shipment
       "Status of the Cargo",
       "Bonded Warehouse (Terminal)",
       "General Warehouse",
+      "ETA (Estimated Arrival)",
+      "Delivery at BYD Date",
       "Deadline (Free Time Expiration Date)",
       "Days Remaining / Days Overdue"
     ];
+
+    const formatDateValue = (d: any) => {
+      if (!d) return "N/A";
+      const dateObj = new Date(d);
+      return isNaN(dateObj.getTime()) ? "N/A" : dateObj.toLocaleDateString();
+    };
 
     const rows = exportData.map(s => {
       let daysText = "N/A";
@@ -310,7 +318,9 @@ export const DemurrageControl: React.FC<{ shipments: Shipment[] }> = ({ shipment
         s.status || s.statusComex || "N/A",
         s.bondedWarehouse || "N/A",
         s.generalWarehouse || "N/A",
-        s.freeTimeDate ? new Date(s.freeTimeDate).toLocaleDateString() : "N/A",
+        formatDateValue(s.estimatedDelivery),
+        formatDateValue(s.deliveryByd),
+        formatDateValue(s.freeTimeDate),
         daysText
       ];
     });
