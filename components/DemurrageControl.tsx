@@ -21,7 +21,8 @@ import {
   ChevronUp,
   Sliders,
   CheckCircle2,
-  Undo2
+  Undo2,
+  Download
 } from 'lucide-react';
 
 interface DemurrageControlProps {
@@ -275,6 +276,70 @@ export const DemurrageControl: React.FC<{ shipments: Shipment[] }> = ({ shipment
     }));
   };
 
+  const handleExportExcel = () => {
+    // Filter active raw shipments matching current search inputs
+    const exportData = shipments.filter(filterShipmentByUI);
+
+    const headers = [
+      "Vessel Name",
+      "Bill of Lading (BL)",
+      "Container Number",
+      "Shipowner (Carrier)",
+      "Status of the Cargo",
+      "Bonded Warehouse (Terminal)",
+      "General Warehouse",
+      "Deadline (Free Time Expiration Date)",
+      "Days Remaining / Days Overdue"
+    ];
+
+    const rows = exportData.map(s => {
+      let daysText = "N/A";
+      if (s.freeTimeDate) {
+        const freeTimeUTC = new Date(s.freeTimeDate);
+        freeTimeUTC.setHours(0, 0, 0, 0);
+        const diffTime = freeTimeUTC.getTime() - todayTime;
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        daysText = diffDays < 0 ? `${Math.abs(diffDays)} days Overdue` : `${diffDays} days remaining`;
+      }
+
+      return [
+        s.vesselName || "N/A",
+        s.billOfLading || "N/A",
+        s.containerNumber || "N/A",
+        s.shipowner || s.carrier || "N/A",
+        s.status || s.statusComex || "N/A",
+        s.bondedWarehouse || "N/A",
+        s.generalWarehouse || "N/A",
+        s.freeTimeDate ? new Date(s.freeTimeDate).toLocaleDateString() : "N/A",
+        daysText
+      ];
+    });
+
+    const escapeCSV = (val: string) => {
+      const clean = val.replace(/"/g, '""');
+      if (clean.includes(",") || clean.includes("\n") || clean.includes('"') || clean.includes(";")) {
+        return `"${clean}"`;
+      }
+      return clean;
+    };
+
+    const csvContent = [
+      headers.map(escapeCSV).join(","),
+      ...rows.map(row => row.map(escapeCSV).join(","))
+    ].join("\n");
+
+    const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    
+    const dStr = new Date().toISOString().split('T')[0];
+    link.setAttribute("download", `BYD_Demurrage_Report_${dStr}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const renderContainerCard = (s: Shipment) => {
     const diffDays = s.freeTimeDate 
       ? Math.ceil((new Date(s.freeTimeDate).setHours(0,0,0,0) - todayTime) / (1000 * 60 * 60 * 24))
@@ -382,15 +447,25 @@ export const DemurrageControl: React.FC<{ shipments: Shipment[] }> = ({ shipment
           </div>
         </div>
 
-        {/* Reference Date Control Widget */}
-        <div className="flex flex-col gap-1 text-xs">
-          <label className="text-slate-400 font-mono text-[9px] font-black uppercase text-right">SYSTEM REFERENCE DATE</label>
-          <input 
-            type="date" 
-            value={evaluationDate}
-            onChange={(e) => setEvaluationDate(e.target.value)}
-            className="bg-slate-800 border border-slate-700 rounded-xl px-4 py-2 font-mono font-black text-sm text-white focus:outline-none focus:border-red-500"
-          />
+        {/* Reference Date Control Widget & Actions */}
+        <div className="flex flex-col sm:flex-row items-end gap-3 shrink-0">
+          <div className="flex flex-col gap-1 text-xs w-full sm:w-auto">
+            <label className="text-slate-400 font-mono text-[9px] font-black uppercase text-right">SYSTEM REFERENCE DATE</label>
+            <input 
+              type="date" 
+              value={evaluationDate}
+              onChange={(e) => setEvaluationDate(e.target.value)}
+              className="bg-slate-800 border border-slate-700 rounded-xl px-4 py-2 font-mono font-black text-sm text-white focus:outline-none focus:border-red-500 w-full sm:w-44"
+            />
+          </div>
+          
+          <button
+            onClick={handleExportExcel}
+            className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider bg-emerald-600 hover:bg-emerald-500 text-white transition-all border border-emerald-500/20 shadow-md w-full sm:w-auto"
+          >
+            <Download className="w-4 h-4" />
+            <span>Export Excel</span>
+          </button>
         </div>
       </div>
 
