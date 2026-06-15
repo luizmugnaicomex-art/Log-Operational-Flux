@@ -653,6 +653,7 @@ export const calculateDashboardData = (shipments: Shipment[]): { kpis: KpiData, 
         carrierVolume: Record<string, number>; 
         carrierLate: Record<string, number>;
         warehousePicked: Record<string, number>;
+        generalWarehousePicked: Record<string, number>;
     }> = shipments.reduce((acc, s) => {
         if (s.deliveryByd) {
             const dateObj = new Date(s.deliveryByd);
@@ -672,7 +673,8 @@ export const calculateDashboardData = (shipments: Shipment[]): { kpis: KpiData, 
                     achievementPct: 0,
                     carrierVolume: {},
                     carrierLate: {},
-                    warehousePicked: {}
+                    warehousePicked: {},
+                    generalWarehousePicked: {}
                 };
             }
             acc[dayKey].containerCount++;
@@ -682,6 +684,9 @@ export const calculateDashboardData = (shipments: Shipment[]): { kpis: KpiData, 
 
             const warehouse = s.bondedWarehouse || 'Unknown';
             acc[dayKey].warehousePicked[warehouse] = (acc[dayKey].warehousePicked[warehouse] || 0) + 1;
+
+            const genWarehouse = s.generalWarehouse || 'N/A';
+            acc[dayKey].generalWarehousePicked[genWarehouse] = (acc[dayKey].generalWarehousePicked[genWarehouse] || 0) + 1;
 
             if (s.clientDeliveryVariance !== null && s.clientDeliveryVariance > 0) {
                 acc[dayKey].lateCount++;
@@ -901,6 +906,7 @@ export const calculateDashboardData = (shipments: Shipment[]): { kpis: KpiData, 
     const leadTimeTrend = (Object.values(dailyData) as any[]).sort((a,b) => a.date.getTime() - b.date.getTime());
     const dailyCarrierBreakdown = leadTimeTrend.map(day => ({ date: day.date, label: day.label, total: day.containerCount, ...day.carrierVolume }));
     const dailyWarehousePickedBreakdown = leadTimeTrend.map(day => ({ date: day.date, label: day.label, total: day.containerCount, ...day.warehousePicked }));
+    const dailyGeneralWarehousePickedBreakdown = leadTimeTrend.map(day => ({ date: day.date, label: day.label, total: day.containerCount, ...day.generalWarehousePicked }));
     const dailyCarrierDelayBreakdown = leadTimeTrend.map(day => ({ date: day.date, label: day.label, totalLate: day.lateCount, ...day.carrierLate }));
     const dailyDepotReturnBreakdown = Object.values(dailyDepotData).sort((a,b) => a.date.getTime() - b.date.getTime()).map(day => ({ date: day.date, label: day.label, total: day.total, ...day.depots }));
 
@@ -955,6 +961,7 @@ export const calculateDashboardData = (shipments: Shipment[]): { kpis: KpiData, 
         leadTimeTrend,
         dailyCarrierBreakdown,
         dailyWarehousePickedBreakdown,
+        dailyGeneralWarehousePickedBreakdown,
         dailyCarrierDelayBreakdown,
         dailyDepotReturnBreakdown,
         monthlyStatus,

@@ -223,6 +223,12 @@ export interface ChartData {
     total: number;
     [key: string]: any;
   }>;
+  dailyGeneralWarehousePickedBreakdown: Array<{
+    date: Date;
+    label: string;
+    total: number;
+    [key: string]: any;
+  }>;
   dailyCarrierDelayBreakdown: Array<{
     date: Date;
     label: string;

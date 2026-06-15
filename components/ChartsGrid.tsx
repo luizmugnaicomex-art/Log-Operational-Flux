@@ -79,6 +79,17 @@ const getWarehouseColor = (name: string, index: number) => {
     return chartColors[index % chartColors.length];
 };
 
+const getGeneralWarehouseColor = (name: string, index: number) => {
+    const upperName = name.toUpperCase();
+    if (upperName.includes('INTERM') || upperName.includes('MOP')) return '#7C3AED'; // violet
+    if (upperName.includes('BODY') || upperName.includes('C01')) return '#2563EB'; // blue
+    if (upperName.includes('PAINT') || upperName.includes('C02')) return '#F59E0B'; // amber/orange
+    if (upperName.includes('ASSEMBLY') || upperName.includes('C03')) return '#16A34A'; // green
+    if (upperName.includes('BATTERY') || upperName.includes('C04')) return '#EC4899'; // pink
+    if (upperName.includes('N/A')) return '#94A3B8'; // gray
+    return chartColors[(index + 4) % chartColors.length];
+};
+
 const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
         const hasInventory = payload.some((p: any) => String(p.name).includes("Remaining Balance"));
@@ -426,6 +437,76 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
         </div>
     );
 
+    const generalWarehouseNames = useMemo(() => {
+        const names = new Set<string>();
+        data.dailyGeneralWarehousePickedBreakdown.forEach(day => {
+            Object.keys(day).forEach(key => {
+                if (key !== 'date' && key !== 'label' && key !== 'total') {
+                    names.add(key);
+                }
+            });
+        });
+        return Array.from(names);
+    }, [data.dailyGeneralWarehousePickedBreakdown]);
+
+    const generalWarehouseStats = useMemo(() => {
+        const sums: Record<string, number> = {};
+        const activeDays: Record<string, number> = {};
+        const totalDays = data.dailyGeneralWarehousePickedBreakdown.length || 1;
+        
+        generalWarehouseNames.forEach(name => {
+            sums[name] = 0;
+            activeDays[name] = 0;
+        });
+
+        data.dailyGeneralWarehousePickedBreakdown.forEach(day => {
+            generalWarehouseNames.forEach(name => {
+                if (day[name]) {
+                    sums[name] += day[name];
+                    activeDays[name] += 1;
+                }
+            });
+        });
+
+        return generalWarehouseNames.map(name => {
+            const total = sums[name];
+            const active = activeDays[name] || 0;
+            const activeAvg = active > 0 ? Math.round(total / active) : 0;
+            const fullAvg = Math.round(total / totalDays);
+            const inconsistent = active > 0 && active < totalDays * 0.5;
+
+            return {
+                name,
+                total,
+                activeDays: active,
+                totalDays,
+                activeAvg,
+                fullAvg,
+                inconsistent
+            };
+        }).sort((a, b) => b.activeAvg - a.activeAvg);
+    }, [data.dailyGeneralWarehousePickedBreakdown, generalWarehouseNames]);
+
+    const renderGeneralWarehouseStats = () => (
+        <div className="flex flex-wrap gap-2 justify-end">
+            {generalWarehouseStats.map((wh, index) => {
+                const color = getGeneralWarehouseColor(wh.name, index);
+                return (
+                    <div 
+                        key={wh.name} 
+                        className={`flex items-center gap-1.5 bg-slate-50 px-2 py-1 rounded-lg border ${wh.inconsistent ? 'border-red-300 bg-red-50' : 'border-slate-100'}`}
+                        title={`Total: ${wh.total} | Active Days: ${wh.activeDays}/${wh.totalDays} | Full Period Avg: ${wh.fullAvg} | Active Day Avg: ${wh.activeAvg}`}
+                    >
+                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: color }}></div>
+                        <span className="text-[10px] font-black uppercase text-slate-500">{wh.name}:</span>
+                        <span className="text-xs font-black text-slate-800">{wh.activeAvg} AVG</span>
+                        {wh.inconsistent && <span className="text-[10px] ml-1" title="Inconsistent usage pattern (active < 50% of days)">⚠️</span>}
+                    </div>
+                );
+            })}
+        </div>
+    );
+
     const depotStats = useMemo(() => {
         const sums: Record<string, number> = {};
         const activeDays: Record<string, number> = {};
@@ -559,6 +640,28 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                             </Bar>
                         ))}
                         <Bar dataKey="total" stackId="warehouse" fill="transparent" isAnimationActive={false}>
+                            <LabelList dataKey="total" position="top" style={{ fontSize: labelSize, fill: '#1e293b', fontWeight: 900 }} />
+                        </Bar>
+                    </BarChart>
+                );
+            case 'daily_general_warehouse_picked':
+                return (
+                    <BarChart data={data.dailyGeneralWarehousePickedBreakdown} margin={{ top: 20, right: 20, left: 10, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                        <XAxis dataKey="label" tick={{ fontSize: tickSize, fontWeight: 700, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                        <YAxis tick={{ fontSize: labelSize, fontWeight: 700, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                        <Tooltip content={<CustomTooltip />} cursor={{fill: '#f8fafc'}} />
+                        <Legend wrapperStyle={{ fontSize: tickSize, fontWeight: 800, textTransform: 'uppercase', paddingTop: '20px' }} />
+                        {generalWarehouseNames.map((name, index) => (
+                            <Bar key={name} dataKey={name} stackId="gen_warehouse" fill={getGeneralWarehouseColor(name, index)}>
+                                <LabelList dataKey={name} position="center" content={(props: any) => {
+                                    const { x, y, width, height, value } = props;
+                                    if (value <= 0) return null;
+                                    return <text x={x + width / 2} y={y + height / 2} fill="#fff" textAnchor="middle" dominantBaseline="middle" fontSize={tickSize} fontWeight={900}>{value}</text>;
+                                }} />
+                            </Bar>
+                        ))}
+                        <Bar dataKey="total" stackId="gen_warehouse" fill="transparent" isAnimationActive={false}>
                             <LabelList dataKey="total" position="top" style={{ fontSize: labelSize, fill: '#1e293b', fontWeight: 900 }} />
                         </Bar>
                     </BarChart>
@@ -1002,6 +1105,7 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
             case 'depot_distribution': return { title: "5 - Depot Share Distribution", subtitle: "Total cumulative distribution of container returns per depot facility." };
             case 'daily_depot_return': return { title: "6 - Daily Depot Return Throughput", subtitle: "Daily units returned to depot facilities (Column AY) stacked by Depot (AZ)." };
             case 'daily_warehouse_picked': return { title: "7 - Daily Warehouse Picked Quantity", subtitle: "Daily quantity of items picked from warehouses segmented by Bonded Warehouse." };
+            case 'daily_general_warehouse_picked': return { title: "7.1 - Daily General Warehouse Usage", subtitle: "Daily volume delivered and unloaded segmented by target General Warehouse (e.g., Body Shop, Assembly, Paint Shop, etc)." };
             case 'delay_distribution': return { title: "Daily Delay Distribution by Carrier", subtitle: "Daily count of late shipments categorized by the responsible transport company." };
             case 'monthly_trend': return { title: "Monthly Performance & Volume", subtitle: "Tracking monthly shipment totals and delay counts." };
             case 'terminal_capacity': return { title: "Terminal Picking & Capacity", subtitle: "Current warehouse volume vs maximum reported storage capacity." };
@@ -1181,6 +1285,19 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                 </ChartContainer>
             </div>
 
+            {/* 7.1 - Daily General Warehouse Usage */}
+            <div className="export-section lg:col-span-2">
+                <ChartContainer
+                    title={getChartMeta('daily_general_warehouse_picked').title}
+                    subtitle={getChartMeta('daily_general_warehouse_picked').subtitle}
+                    height={400}
+                    onMaximize={() => setMaximizedChart('daily_general_warehouse_picked')}
+                    headerRight={renderGeneralWarehouseStats()}
+                >
+                    {renderChartContent('daily_general_warehouse_picked')}
+                </ChartContainer>
+            </div>
+
             {/* Secondary Charts */}
             <div className="export-section lg:col-span-2">
                 <ChartContainer
@@ -1307,6 +1424,7 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                                     </div>
                                 )}
                                 {maximizedChart === 'daily_warehouse_picked' && renderWarehouseStats()}
+                                {maximizedChart === 'daily_general_warehouse_picked' && renderGeneralWarehouseStats()}
                                 {maximizedChart === 'daily_depot_return' && renderDepotStats()}
                                 <button 
                                     onClick={() => setMaximizedChart(null)}
