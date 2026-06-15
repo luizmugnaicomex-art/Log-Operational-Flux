@@ -1,7 +1,6 @@
 import React, { useMemo } from 'react';
 import { motion } from 'motion/react';
-import { Shipment, PortYardDashboardData } from '../types';
-import { calculatePortYardOperationData } from '../utils/dataProcessor';
+import { Shipment } from '../types';
 import {
     BarChart,
     Bar,
@@ -13,213 +12,296 @@ import {
     Cell,
     PieChart,
     Pie,
-    Legend
+    Legend,
+    LineChart,
+    Line,
+    ReferenceLine
 } from 'recharts';
+import { Anchor, BarChart3, TrendingUp, Compass, Settings, AlertCircle } from 'lucide-react';
 
 interface PortYardOperationStatusProps {
     shipments: Shipment[];
 }
 
-const ChartContainer: React.FC<{
-    titleCN: string;
-    titleEN: string;
-    children: React.ReactNode;
-    height?: number;
-}> = ({ titleCN, titleEN, children, height = 300 }) => (
-    <div className="glass p-8 rounded-[2.5rem] border-none shadow-glass transition-all duration-300 ring-1 ring-white/40 hover:bg-white/50">
-        <div className="mb-6">
-            <h3 className="text-sm font-black text-slate-800 uppercase tracking-[0.25em]">{titleCN}</h3>
-            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest opacity-80">{titleEN}</div>
-        </div>
-        <div className="chart-wrapper rounded-2xl overflow-hidden" style={{ width: '100%', height: height }}>
-            <ResponsiveContainer width="100%" height={height}>
-                {children as React.ReactElement}
-            </ResponsiveContainer>
-        </div>
-    </div>
-);
-
-const KPICard: React.FC<{ labelCN: string; labelEN: string; value: string | number }> = ({ labelCN, labelEN, value }) => (
-    <div className="glass p-6 rounded-[2.5rem] ring-1 ring-white/30">
-        <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{labelCN}</div>
-        <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{labelEN}</div>
-        <p className="text-2xl font-display font-black text-slate-800 mt-2">{value}</p>
-    </div>
-);
-
-const PortYardOperationStatus: React.FC<PortYardOperationStatusProps> = ({ shipments }) => {
-    const data = useMemo<PortYardDashboardData>(() => {
-        return calculatePortYardOperationData(shipments);
+export const PortYardOperationStatus: React.FC<PortYardOperationStatusProps> = ({ shipments }) => {
+    // 1. Calculate Real Daily Port Arrived Volume (based on ATA)
+    const dailyPortArrivals = useMemo(() => {
+        const counts: Record<string, number> = {};
+        shipments.forEach(s => {
+            if (s.ata) {
+                const dateStr = s.ata.toISOString().split('T')[0];
+                counts[dateStr] = (counts[dateStr] || 0) + 1;
+            }
+        });
+        
+        return Object.entries(counts)
+            .map(([date, count]) => ({ date, count }))
+            .sort((a, b) => a.date.localeCompare(b.date))
+            .slice(-15); // Show latest 15 days of actual arrivals
     }, [shipments]);
 
-    // Read manual data from localStorage to integrate into charts
-    const manualData = useMemo(() => {
-        const stored = localStorage.getItem('emptyContainersDataV3');
-        if (stored) {
-            try {
-                const parsed = JSON.parse(stored);
-                // Flatten all sections into a single list for charting if needed
-                const all = [...(parsed.bondedArea || []), ...(parsed.warehouse || []), ...(parsed.buffer || [])];
-                return {
-                    sections: parsed,
-                    flattened: all.map((loc: any) => ({
-                        name: loc.name,
-                        Occupied: loc.fullCount,
-                        Empty: loc.emptyCount,
-                        Total: loc.fullCount + loc.emptyCount
-                    }))
-                };
-            } catch (e) {
-                return null;
+    // 2. Real Daily Operation Delivery Trend (based on deliveryByd, matching dashboard)
+    const dailyDeliveryTrend = useMemo(() => {
+        const counts: Record<string, number> = {};
+        shipments.forEach(s => {
+            if (s.deliveryByd) {
+                const dateStr = s.deliveryByd.toISOString().split('T')[0];
+                counts[dateStr] = (counts[dateStr] || 0) + 1;
             }
-        }
-        return null;
-    }, []);
+        });
 
-    const yardChartData = useMemo(() => {
-        if (!manualData || manualData.flattened.length === 0) return data.yardSlotData;
-        // Merge or replace? User said "get the information from..." 
-        // Let's combine them for a comprehensive view
-        return manualData.flattened;
-    }, [data.yardSlotData, manualData]);
+        return Object.entries(counts)
+            .map(([date, count]) => ({ date, count }))
+            .sort((a, b) => a.date.localeCompare(b.date))
+            .slice(-15); // Show latest 15 days of deliveries
+    }, [shipments]);
+
+    // Average delivered quantity of containers per day (for KPI indicator)
+    const avgDeliveredCount = useMemo(() => {
+        if (dailyDeliveryTrend.length === 0) return 0;
+        const total = dailyDeliveryTrend.reduce((acc, curr) => acc + curr.count, 0);
+        return Math.round(total / dailyDeliveryTrend.length);
+    }, [dailyDeliveryTrend]);
+
+    // 3. Port Operation Distribution - Bonded vs General Warehouses used under current filter array
+    const bondedDist = useMemo(() => {
+        const counts: Record<string, number> = {};
+        shipments.forEach(s => {
+            const wh = s.bondedWarehouse || 'Cleared/Unassigned';
+            counts[wh] = (counts[wh] || 0) + 1;
+        });
+        // Vibrant professional colors
+        const colors = ['#2563EB', '#F59E0B', '#10B981', '#EC4899', '#8B5CF6', '#64748B'];
+        return Object.entries(counts)
+            .map(([name, value], idx) => ({
+                name,
+                value,
+                fill: colors[idx % colors.length]
+            }))
+            .filter(item => item.value > 0)
+            .sort((a, b) => b.value - a.value);
+    }, [shipments]);
+
+    const generalDist = useMemo(() => {
+        const counts: Record<string, number> = {};
+        shipments.forEach(s => {
+            const wh = s.generalWarehouse || 'In Transit/Unassigned';
+            counts[wh] = (counts[wh] || 0) + 1;
+        });
+        const colors = ['#4F46E5', '#10B981', '#F59E0B', '#EF4444', '#EC4899', '#64748B'];
+        return Object.entries(counts)
+            .map(([name, value], idx) => ({
+                name,
+                value,
+                fill: colors[idx % colors.length]
+            }))
+            .filter(item => item.value > 0)
+            .sort((a, b) => b.value - a.value);
+    }, [shipments]);
+
+    // Active port dwell counts (arrived but not delivered yet)
+    const activePortDwell = useMemo(() => {
+        return shipments.filter(s => s.ata && !s.deliveryByd).length;
+    }, [shipments]);
 
     return (
         <motion.div 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="flex flex-col gap-10"
+            className="space-y-12 pb-20 w-full"
         >
-            {/* Section 1 - Port Operation */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <ChartContainer titleCN="今日港口作业量" titleEN="Daily Port Operation Volume" height={300}>
-                    <BarChart layout="vertical" data={data.portOperationData} margin={{ top: 5, right: 30, left: 40, bottom: 5 }}>
-                        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E0E0E0" />
-                        <XAxis type="number" fontSize={11} stroke="#888" />
-                        <YAxis dataKey="nameCN" type="category" fontSize={11} stroke="#555" width={80} />
-                        <Tooltip />
-                        <Bar dataKey="value" fill="#2563EB" barSize={20} />
-                    </BarChart>
-                </ChartContainer>
+            {/* Header Bento Layout */}
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+               <div className="lg:col-span-2 glass p-10 rounded-[3rem] flex flex-col justify-center relative overflow-hidden ring-1 ring-white/40 shadow-glass bg-gradient-to-br from-indigo-50/50 to-transparent">
+                  <div className="absolute -right-10 -bottom-10 opacity-5">
+                     <span className="material-icons text-[15rem] font-black">锚</span>
+                  </div>
+                  <div className="relative z-10">
+                     <div className="flex items-center gap-2 mb-2">
+                        <span className="text-[10px] font-black uppercase text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full border border-indigo-100 flex items-center gap-1">
+                           <Anchor className="w-3.5 h-3.5 animate-spin" /> Port & Yard Operations
+                        </span>
+                     </div>
+                     <h2 className="text-4xl font-display font-black text-slate-850 tracking-tight leading-tight">Terminal Capacity Flow</h2>
+                     <p className="text-slate-500 font-bold mt-4 tracking-wide text-xs">
+                        Precise tracking of arrived vessel volumes, daily gateway clearance performance, and distributed warehouse loads.
+                     </p>
+                  </div>
+               </div>
 
-                <ChartContainer titleCN="港口作业分布" titleEN="Port Operation Distribution" height={300}>
-                    <PieChart>
-                        <Pie data={data.portDistData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} fill="#8884d8">
-                            {data.portDistData.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={entry.fill} />
-                            ))}
-                        </Pie>
-                        <Tooltip />
-                        <Legend />
-                    </PieChart>
-                </ChartContainer>
+               {/* Real daily average delivered KPI */}
+               <div className="glass p-8 rounded-[3rem] flex flex-col justify-between bg-slate-900 text-white relative overflow-hidden shadow-2xl ring-1 ring-white/25">
+                  <div className="absolute top-0 right-0 p-6 opacity-10">
+                     <span className="material-icons text-5xl">trending_up</span>
+                  </div>
+                  <div>
+                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none font-display">Daily Gateout Average</p>
+                     <p className="text-[9px] text-indigo-305 uppercase font-semibold">Active Clearance Period</p>
+                  </div>
+                  <div className="mt-4">
+                     <div className="text-5xl font-display font-black tracking-tight leading-none text-emerald-400">
+                        {avgDeliveredCount} <span className="text-xs text-white uppercase font-sans">CNTR/Day</span>
+                     </div>
+                     <p className="text-[9px] text-slate-400 mt-2 font-bold uppercase tracking-wider">Computed from delivery trend log</p>
+                  </div>
+               </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                    <KPICard labelCN="今日到港" labelEN="Daily Arrivals" value="124" />
-                    <KPICard labelCN="到港出货比" labelEN="Daily Drain/Arrivals" value="0.85" />
-                    <KPICard labelCN="月度吞吐量" labelEN="Monthly Port Throughput" value="12,450" />
-                    <KPICard labelCN="海关待处理" labelEN="Customs Pending" value="45" />
-                    <KPICard labelCN="排队车辆" labelEN="Trucks in Queue" value="12" />
-                    <KPICard labelCN="堆场利用率" labelEN="Yard Occupancy" value="78%" />
+               {/* Active dwell units at port gate */}
+               <div className="glass p-8 rounded-[3rem] flex flex-col justify-between bg-white border border-slate-200 relative overflow-hidden shadow-md">
+                  <div className="absolute top-0 right-0 p-6 opacity-10">
+                     <span className="material-icons text-5xl text-indigo-505">sailing</span>
+                  </div>
+                  <div>
+                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none font-display">Active Yard Dwell</p>
+                     <p className="text-[9px] text-slate-450 uppercase font-semibold">Arrived Undelivered Status</p>
+                  </div>
+                  <div className="mt-4">
+                     <div className="text-5xl font-display font-black tracking-tight leading-none text-slate-800">
+                        {activePortDwell} <span className="text-xs text-slate-400 uppercase font-sans">CNTR</span>
+                     </div>
+                     <p className="text-[9.5px] text-indigo-600 mt-2 font-black uppercase tracking-wider flex items-center gap-1">
+                        <AlertCircle className="w-3.5 h-3.5" /> High demurrage detention risk
+                     </p>
+                  </div>
+               </div>
+            </div>
+
+            {/* Daily Port Operation Volume (Arrived containers based on real ATA dates) */}
+            <div className="glass p-10 rounded-[3.5rem] border-none shadow-glass ring-1 ring-white/40 bg-white">
+                <div className="mb-8 flex justify-between items-center">
+                    <div>
+                        <h3 className="text-2xl font-display font-black text-slate-850 tracking-tight flex items-center gap-2">
+                           <BarChart3 className="w-6 h-6 text-indigo-600" />
+                           Daily Port Operation Volume (ATA)
+                        </h3>
+                        <p className="text-[11px] text-slate-400 font-black uppercase tracking-widest mt-1">
+                           Actual arrived container volume per day recorded at port terminals (ATA Column L)
+                        </p>
+                    </div>
+                </div>
+
+                <div className="h-[280px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={dailyPortArrivals} margin={{ top: 10, right: 10, left: 10, bottom: 10 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                            <XAxis 
+                                dataKey="date" 
+                                tick={{ fontSize: 10, fontWeight: 750, fill: '#64748b' }} 
+                                axisLine={false} 
+                                tickLine={false} 
+                            />
+                            <YAxis tick={{ fontSize: 10, fontWeight: 750, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                            <Tooltip contentStyle={{ borderRadius: '1rem', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }} />
+                            <Bar dataKey="count" name="Arrived Containers" fill="#2563EB" radius={[6, 6, 0, 0]} maxBarSize={32}>
+                                {dailyPortArrivals.map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill="#3B82F6" />
+                                ))}
+                            </Bar>
+                        </BarChart>
+                    </ResponsiveContainer>
                 </div>
             </div>
 
-            {/* Section 2 - Yard Inventory */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <ChartContainer titleCN="堆场库位占比" titleEN="Yard Slot Utilization" height={300}>
-                    <BarChart data={yardChartData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                        <XAxis dataKey="name" tick={{ fontSize: 10, fontWeight: 700 }} />
-                        <YAxis />
-                        <Tooltip />
-                        {manualData ? (
-                             <>
-                                <Bar dataKey="Occupied" fill="#2563EB" name="重箱 (Full)" />
-                                <Bar dataKey="Empty" fill="#94A3B8" name="空箱 (Empty)" />
-                             </>
-                        ) : (
-                            <>
-                                <Bar dataKey="Capacity" fill="#E2E8F0" name="容量 (Capacity)" />
-                                <Bar dataKey="Occupied" fill="#2563EB" name="占用 (Occupied)" />
-                            </>
-                        )}
-                    </BarChart>
-                </ChartContainer>
-                
-                <ChartContainer titleCN="集装箱堆存周期" titleEN="Container Aging Monitoring" height={300}>
-                    <BarChart data={data.containerAgingData} layout="vertical">
-                        <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                        <XAxis type="number" />
-                        <YAxis dataKey="name" type="category" fontSize={10} />
-                        <Tooltip />
-                        <Bar dataKey="d1_7" stackId="a" name="1-7 天" fill="#3B82F6" />
-                        <Bar dataKey="d8_15" stackId="a" name="8-15 天" fill="#10B981" />
-                        <Bar dataKey="d16_30" stackId="a" name="16-30 天" fill="#F59E0B" />
-                        <Bar dataKey="d30plus" stackId="a" name="30+ 天" fill="#EF4444" />
-                    </BarChart>
-                </ChartContainer>
-
-                <ChartContainer titleCN="超期集装箱分析" titleEN="Overdue Container Analysis" height={300}>
-                    <BarChart data={data.overdueAnalysisData}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="name" fontSize={10} />
-                        <YAxis />
-                        <Tooltip />
-                        <Bar dataKey="quantity" name="数量 (Quantity)" fill="#EF4444" />
-                    </BarChart>
-                </ChartContainer>
-            </div>
-
-            {/* Section 3 - Transport & Release */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <ChartContainer titleCN="提柜及放行状态" titleEN="Container Pickup and Release Status" height={300}>
-                    <BarChart data={data.transportReleaseData}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                        <XAxis dataKey="name" fontSize={10} />
-                        <YAxis />
-                        <Tooltip />
-                        <Legend />
-                        <Bar dataKey="Transferred" fill="#94A3B8" name="待处理 (Transferred)" />
-                        <Bar dataKey="Invoiced" fill="#F59E0B" name="已开票 (Invoiced)" />
-                        <Bar dataKey="Released" fill="#10B981" name="已放行 (Released)" />
-                    </BarChart>
-                </ChartContainer>
-
-                <ChartContainer titleCN="本月运输车型" titleEN="Monthly Transportation Type" height={300}>
-                    <PieChart>
-                        <Pie data={data.transportTypeData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={60} outerRadius={80}>
-                            {data.transportTypeData.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={entry.fill} />
+            {/* Port Operation Distribution: Bonded & General side-by-side */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {/* Bonded Distribution */}
+                <div className="glass p-10 rounded-[3.5rem] border-none shadow-glass ring-1 ring-white/40 bg-white/70">
+                    <div className="mb-6">
+                        <h3 className="text-xl font-display font-black text-slate-850 tracking-tight">Port Operation Distribution (Bonded Sector)</h3>
+                        <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-1">Operational breakdown across designated bonded warehouses</p>
+                    </div>
+                    <div className="h-[280px] w-full flex flex-col md:flex-row items-center justify-between gap-6">
+                        <div className="flex-1 h-full w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                    <Pie data={bondedDist} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={55} outerRadius={80}>
+                                        {bondedDist.map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={entry.fill} />
+                                        ))}
+                                    </Pie>
+                                    <Tooltip />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        </div>
+                        <div className="space-y-2 max-h-[220px] overflow-y-auto w-full md:w-48 custom-scrollbar text-[10px]">
+                            {bondedDist.map((item, idx) => (
+                                <div key={idx} className="flex items-center gap-2">
+                                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: item.fill }} />
+                                    <span className="font-bold truncate text-slate-650" title={item.name}>{item.name}:</span>
+                                    <span className="font-mono font-black text-slate-800 ml-auto">{item.value}</span>
+                                </div>
                             ))}
-                        </Pie>
-                        <Tooltip />
-                        <Legend />
-                    </PieChart>
-                </ChartContainer>
+                        </div>
+                    </div>
+                </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                    <KPICard labelCN="月度交付量" labelEN="Monthly Deliveries" value="3,637" />
-                    <KPICard labelCN="平均周转天数" labelEN="Average Turnaround Time" value="34.11" />
-                    <KPICard labelCN="待分派车辆" labelEN="Pending Dispatch" value="1,073" />
-                    <KPICard labelCN="运输效率" labelEN="Transport Efficiency" value="92%" />
-                    <KPICard labelCN="延误箱量" labelEN="Delayed Containers" value="18" />
-                    <KPICard labelCN="今日发运进度" labelEN="Daily Shipment Progress" value="85%" />
+                {/* General Warehouses Used Distribution */}
+                <div className="glass p-10 rounded-[3.5rem] border-none shadow-glass ring-1 ring-white/40 bg-white/70">
+                    <div className="mb-6">
+                        <h3 className="text-xl font-display font-black text-slate-850 tracking-tight">Port Operation Distribution (General Sector)</h3>
+                        <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-1">Operational breakdown across general depots deployed during month</p>
+                    </div>
+                    <div className="h-[280px] w-full flex flex-col md:flex-row items-center justify-between gap-6">
+                        <div className="flex-1 h-full w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                    <Pie data={generalDist} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={55} outerRadius={80}>
+                                        {generalDist.map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={entry.fill} />
+                                        ))}
+                                    </Pie>
+                                    <Tooltip />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        </div>
+                        <div className="space-y-2 max-h-[220px] overflow-y-auto w-full md:w-48 custom-scrollbar text-[10px]">
+                            {generalDist.map((item, idx) => (
+                                <div key={idx} className="flex items-center gap-2">
+                                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: item.fill }} />
+                                    <span className="font-bold truncate text-slate-650" title={item.name}>{item.name}:</span>
+                                    <span className="font-mono font-black text-slate-800 ml-auto">{item.value}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            {/* Section 4 - Daily Operation Trend */}
-            <ChartContainer titleCN="每日作业趋势" titleEN="Daily Operation Trend" height={300}>
-                <BarChart data={data.dailyTrendData}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="name" fontSize={10} />
-                    <YAxis />
-                    <Tooltip />
-                    <Legend />
-                    <Bar dataKey="TEGMA" stackId="a" fill="#3B82F6" />
-                    <Bar dataKey="GABARDO" stackId="a" fill="#10B981" />
-                    <Bar dataKey="BRAZUL" stackId="a" fill="#F59E0B" />
-                    <Bar dataKey="TRANSILVA" stackId="a" fill="#EF4444" />
-                </BarChart>
-            </ChartContainer>
+            {/* Daily Operation Trend (Pick-up quantities matching dashboard template precisely) */}
+            <div className="glass p-10 rounded-[3.5rem] border-none shadow-glass ring-1 ring-white/40 bg-white">
+                <div className="mb-8 flex justify-between items-center">
+                    <div>
+                        <h3 className="text-2xl font-display font-black text-slate-850 tracking-tight flex items-center gap-2">
+                           <TrendingUp className="w-6 h-6 text-emerald-600" />
+                           Daily Operation Trend (Deliveries)
+                        </h3>
+                        <p className="text-[11px] text-slate-400 font-black uppercase tracking-widest mt-1">
+                           Standard daily distribution of delivered and cleared containers (Delivery BYD Column AI)
+                        </p>
+                    </div>
+                </div>
+
+                <div className="h-[300px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={dailyDeliveryTrend} margin={{ top: 15, right: 30, left: 10, bottom: 15 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                            <XAxis 
+                                dataKey="date" 
+                                tick={{ fontSize: 10, fontWeight: 750, fill: '#64748b' }} 
+                                axisLine={false} 
+                                tickLine={false} 
+                            />
+                            <YAxis tick={{ fontSize: 10, fontWeight: 750, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                            <Tooltip contentStyle={{ borderRadius: '1rem', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }} />
+                            <Legend wrapperStyle={{ fontSize: '10px', textTransform: 'uppercase', paddingTop: '10px' }} />
+                            {/* Standard Goal limit visual references */}
+                            <ReferenceLine y={150} stroke="#EF4444" strokeWidth={2} strokeDasharray="4 4" label={{ value: 'Daily Goal: 150', fill: '#EF4444', fontSize: 10, fontWeight: 'bold', position: 'top' }} />
+                            <ReferenceLine y={300} stroke="#4F46E5" strokeWidth={2} strokeDasharray="4 4" label={{ value: 'Challenge Goal: 300', fill: '#4F46E5', fontSize: 10, fontWeight: 'bold', position: 'top' }} />
+                            <Line type="monotone" dataKey="count" name="Delivered Containers (Daily)" stroke="#10B981" strokeWidth={3} dot={{ r: 5, fill: '#10B981' }} activeDot={{ r: 8 }} />
+                        </LineChart>
+                    </ResponsiveContainer>
+                </div>
+            </div>
         </motion.div>
     );
 };

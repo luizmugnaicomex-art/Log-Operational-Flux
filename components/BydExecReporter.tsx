@@ -17,7 +17,11 @@ import {
   TrendingUp, 
   Moon, 
   Sun,
-  ShieldCheck
+  ShieldCheck,
+  Lightbulb,
+  Check,
+  Copy,
+  AlertTriangle
 } from "lucide-react";
 
 interface BydExecReporterProps {
@@ -26,9 +30,10 @@ interface BydExecReporterProps {
 
 export default function BydExecReporter({ shipments }: BydExecReporterProps) {
   // Live previews active sub-tab switching
-  const [activeTab, setActiveTab] = useState<"slides" | "mom" | "database">("slides");
+  const [activeTab, setActiveTab] = useState<"slides" | "mom" | "database" | "advisor">("slides");
   const [currentSlide, setCurrentSlide] = useState<number>(1);
   const [showOverridePanel, setShowOverridePanel] = useState(false);
+  const [copiedText, setCopiedText] = useState(false);
 
   // 1. Terminal Stocks States
   const [teconStock, setTeconStock] = useState<number>(1253);
@@ -410,8 +415,8 @@ export default function BydExecReporter({ shipments }: BydExecReporterProps) {
         <div className="xl:col-span-3 space-y-6">
           
           {/* Tabs switch */}
-          <div className="flex items-center justify-between bg-white border border-slate-200 p-2 rounded-[2rem] shadow-sm">
-            <div className="flex items-center gap-1">
+          <div className="flex flex-wrap items-center justify-between bg-white border border-slate-200 p-2 rounded-[2rem] shadow-sm gap-2">
+            <div className="flex flex-wrap items-center gap-1">
               <button
                 onClick={() => setActiveTab("slides")}
                 className={`flex items-center gap-2 px-6 py-3 rounded-full text-[10px] font-black uppercase tracking-wider transition-all ${activeTab === "slides" ? "bg-byd-blue text-white shadow-md shadow-slate-100" : "text-slate-500 hover:text-slate-850"}`}
@@ -432,6 +437,13 @@ export default function BydExecReporter({ shipments }: BydExecReporterProps) {
               >
                 <Database className="w-4 h-4" />
                 Freight Explorer Data
+              </button>
+              <button
+                onClick={() => setActiveTab("advisor")}
+                className={`flex items-center gap-2 px-6 py-3 rounded-full text-[10px] font-black uppercase tracking-wider transition-all ${activeTab === "advisor" ? "bg-byd-blue text-white shadow-md shadow-slate-100" : "text-slate-500 hover:text-slate-850"}`}
+              >
+                <Lightbulb className="w-4 h-4 text-amber-500 animate-bounce" />
+                Weekly Report Advisory
               </button>
             </div>
 
@@ -792,27 +804,29 @@ export default function BydExecReporter({ shipments }: BydExecReporterProps) {
                       />
                     </div>
                     <div className="flex flex-col gap-1">
-                      <span className="font-extrabold text-[9px] uppercase text-slate-400 tracking-wider">Carrier Carrier</span>
+                      <span className="font-extrabold text-[9px] uppercase text-slate-400 tracking-wider">Carrier</span>
                       <select 
                         value={dbCarrier} 
                         onChange={(e) => setDbCarrier(e.target.value)} 
-                        className="px-3 py-2 bg-white border border-slate-205 rounded-xl text-xs font-bold"
-                      />
-                      <option value="ALL">ALL CARRIERS</option>
-                      <option value="CMA CGM">CMA CGM</option>
-                      <option value="MSC">MSC</option>
+                        className="px-3 py-2 bg-white border border-slate-205 rounded-xl text-xs font-bold font-sans"
+                      >
+                        <option value="ALL">ALL CARRIERS</option>
+                        <option value="CMA CGM">CMA CGM</option>
+                        <option value="MSC">MSC</option>
+                      </select>
                     </div>
                     <div className="flex flex-col gap-1">
                       <span className="font-extrabold text-[9px] uppercase text-slate-400 tracking-wider">Terminal Destination</span>
                       <select 
                         value={dbTerminal} 
                         onChange={(e) => setDbTerminal(e.target.value)} 
-                        className="px-3 py-2 bg-white border border-slate-205 rounded-xl text-xs font-bold"
-                      />
-                      <option value="ALL">ALL TERMINALS</option>
-                      <option value="TECON">TECON S.A.</option>
-                      <option value="TPC">TPC</option>
-                      <option value="INTERMARITIMA">INTERMARITIMA</option>
+                        className="px-3 py-2 bg-white border border-slate-205 rounded-xl text-xs font-bold font-sans"
+                      >
+                        <option value="ALL">ALL TERMINALS</option>
+                        <option value="TECON">TECON S.A.</option>
+                        <option value="TPC">TPC</option>
+                        <option value="INTERMARITIMA">INTERMARITIMA</option>
+                      </select>
                     </div>
                   </div>
 
@@ -867,6 +881,120 @@ export default function BydExecReporter({ shipments }: BydExecReporterProps) {
                         )}
                       </tbody>
                     </table>
+                  </div>
+                </motion.div>
+              )}
+
+              {/* TAB 4: SUPERVISOR WEEKLY REPORT ADVISORY */}
+              {activeTab === "advisor" && (
+                <motion.div
+                  key="advisor-tab"
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -12 }}
+                  transition={{ duration: 0.3 }}
+                  className="space-y-6 flex-1 flex flex-col justify-between min-h-[460px]"
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-4 border-slate-100">
+                    <div>
+                      <span className="text-[10px] uppercase font-black tracking-widest text-[#E11D48] block">
+                        Enterprise Supervisor Advisory
+                      </span>
+                      <h4 className="text-xl font-display font-black text-slate-800 tracking-tight mt-1">
+                        Supervisor Weekly Report Draft Generator 
+                      </h4>
+                    </div>
+                    <button
+                      onClick={() => {
+                        const totalActive = shipments.length;
+                        const delivered = shipments.filter(s => s.deliveryByd).length;
+                        const pendingVal = totalActive - delivered;
+                        const demurCount = shipments.filter(s => s.demurrageCost > 0).length;
+                        const demurSum = Math.round(shipments.reduce((acc, curr) => acc + (curr.demurrageCost || 0), 0));
+
+                        const text = `BYD LOGISTICS OPERATIONS WEEKLY STATUS REPORT
+======================================================
+Evaluation Period: May 21, 2026 (Live Audit Update)
+
+1. CONTAINER VOLUMES & STATUS BREAKDOWN:
+   • Total Active Shipments: ${totalActive} containers
+   • Safely Delivered to BYD Buffer: ${delivered} units
+   • Pending Yard Clearance: ${pendingVal} units
+   • Average Daily Delivery Rate: ${Math.round(delivered / 12 || 22)} units/day
+
+2. DEMURRAGE EXPOSURE & FINANCIAL MITIGATION:
+   • Active Demurrage/Detention Alarms: ${demurCount} units exceeding Free Time
+   • Cumulative Demurrage Risk Value: USD ${demurSum}
+   • Major Bottleneck Carrier: MSC (requires immediate custom protocol support)
+
+3. STRATEGIC SUPERVISOR RECOMMENDATIONS:
+   • Leverage priority clearance and DTA protocols for CDEX / CLIA depots to bypass TECON bottlenecks.
+   • Synchronize yard pickup times with empty container return schedules to lower logistics overhead.`;
+
+                        navigator.clipboard.writeText(text);
+                        setCopiedText(true);
+                        setTimeout(() => setCopiedText(false), 2000);
+                      }}
+                      className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-black uppercase tracking-wider rounded-xl flex items-center gap-2 transition-all active:scale-95 shadow-sm"
+                    >
+                      {copiedText ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-emerald-400" /> Copied Text Draft!
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5" /> Copy Weekly Report Summary
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start my-auto">
+                     {/* Text preview block */}
+                     <div className="bg-slate-900 rounded-3xl p-6 shadow-md text-white border border-slate-800 font-mono text-[11px] leading-relaxed space-y-4 max-h-[300px] overflow-y-auto custom-scrollbar">
+                        <p className="text-emerald-400 font-bold border-b border-white/10 pb-2"># WEEKLY OPERATIONS HIGHLIGHTS REPORT</p>
+                        <p><strong>1. VOLUMES & YARD INVENTORY:</strong><br/>
+                        • Total Active Database: {shipments.length} containers listed.<br/>
+                        • Safely delivered & completed: {shipments.filter(s => s.deliveryByd).length} units.<br/>
+                        • Active pending clearance: {shipments.filter(s => !s.deliveryByd).length} units.<br/>
+                        • Average daily volume: {Math.round(shipments.filter(s => s.deliveryByd).length / 15 || 25)} units/day.
+                        </p>
+                        <p><strong>2. COMPLIANCE & BOTTLENECK ANALYSIS:</strong><br/>
+                        • Demurrage warnings: {shipments.filter(s => s.demurrageCost > 0).length} units at risk.<br/>
+                        • Accrued Demurrage Fee exposure: USD {Math.round(shipments.reduce((acc, curr) => acc + (curr.demurrageCost || 0), 0)).toLocaleString()}<br/>
+                        • Active Bonded depots used: CDEX, INTERMARITIMA, CLIA, TPC, TECON S.A.
+                        </p>
+                        <p><strong>3. IMMEDIATE DEPLOYMENT DIRECTIVES:</strong><br/>
+                        • Prioritize documents collection for the next 7-day arrivals loop.<br/>
+                        • Double-check general warehouse allocations to balance paint shop and assembly line yards.
+                        </p>
+                     </div>
+
+                     {/* Strategic advice columns */}
+                     <div className="space-y-4 text-xs font-semibold text-slate-700 leading-relaxed">
+                        <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 p-4.5 rounded-2xl">
+                           <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                           <div>
+                              <h5 className="font-extrabold uppercase text-amber-800">Yard Demurrage Exposure Warning</h5>
+                              <p className="text-amber-700 mt-1">
+                                 The current database registers active demurrage penalty accumulations. Urge customs brokers to process the DI (Import Declaration) packets for high-risk carrier lots within 48 hours.
+                              </p>
+                           </div>
+                        </div>
+
+                        <div className="flex items-start gap-3 bg-indigo-50 border border-indigo-150 p-4.5 rounded-2xl">
+                           <Lightbulb className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5 animate-pulse" />
+                           <div>
+                              <h5 className="font-extrabold uppercase text-indigo-800">Supplier & General Yard Optimization</h5>
+                              <p className="text-indigo-700 mt-1">
+                                 Compare manually declared inventory buffers with incoming carrier schedules to schedule pickup trucks and avoid port queue over-charges.
+                              </p>
+                           </div>
+                        </div>
+                     </div>
+                  </div>
+                  <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest text-center mt-4">
+                     Auto-compiled based on live uploaded database telemetry.
                   </div>
                 </motion.div>
               )}

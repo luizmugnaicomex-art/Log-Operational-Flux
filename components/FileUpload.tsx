@@ -6,9 +6,10 @@ interface FileUploadProps {
     onFileUpload: (data: any[][]) => void;
     onError: (message: string) => void;
     setIsLoading: (loading: boolean) => void;
+    customClass?: string;
 }
 
-const FileUpload: React.FC<FileUploadProps> = ({ onFileUpload, onError, setIsLoading }) => {
+const FileUpload: React.FC<FileUploadProps> = ({ onFileUpload, onError, setIsLoading, customClass }) => {
     const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (file) {
@@ -40,7 +41,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ onFileUpload, onError, setIsLoa
 
     return (
         <>
-            <label htmlFor="fileInput" className="inline-flex items-center px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg shadow-sm cursor-pointer hover:bg-indigo-700 transition-colors">
+            <label htmlFor="fileInput" className={customClass || "inline-flex items-center px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg shadow-sm cursor-pointer hover:bg-indigo-700 transition-colors"}>
                 <span className="material-icons mr-2">upload_file</span>
                 Upload Excel File
             </label>

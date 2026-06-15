@@ -1,6 +1,19 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Shipment } from '../types';
+
+interface LocationCount {
+  id: string;
+  name: string;
+  emptyCount: number;
+  fullCount: number;
+}
+
+interface StorageData {
+  bondedArea: LocationCount[];
+  warehouse: LocationCount[];
+  buffer: LocationCount[];
+}
 
 interface WarehouseStatusViewProps {
   shipments: Shipment[];
@@ -13,6 +26,32 @@ export function WarehouseStatusView({
   statusComexList,
   generalWarehouseList,
 }: WarehouseStatusViewProps) {
+  // Live manual inventory storage for double-checking compliance
+  const [manualStorage, setManualStorage] = useState<StorageData>({
+    bondedArea: [],
+    warehouse: [],
+    buffer: []
+  });
+
+  useEffect(() => {
+    const stored = localStorage.getItem('emptyContainersDataV3');
+    if (stored) {
+      try {
+        setManualStorage(JSON.parse(stored));
+      } catch (e) {
+        console.error("Failed loading storage in WarehouseStatusView", e);
+      }
+    }
+  }, []);
+
+  const manualBondedSum = useMemo(() => {
+    return manualStorage.bondedArea.reduce((acc, loc) => acc + loc.fullCount + loc.emptyCount, 0);
+  }, [manualStorage]);
+
+  const manualGeneralSum = useMemo(() => {
+    return manualStorage.warehouse.reduce((acc, loc) => acc + loc.fullCount + loc.emptyCount, 0);
+  }, [manualStorage]);
+
   // --- Filter States ---
   const [selectedPO, setSelectedPO] = useState<string[]>([]);
   const [selectedNavio, setSelectedNavio] = useState<string[]>([]);
@@ -217,25 +256,60 @@ export function WarehouseStatusView({
       className="space-y-10 pb-20"
     >
       {/* Header Bento Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-         <div className="lg:col-span-2 glass p-12 rounded-[3.5rem] flex flex-col justify-center relative overflow-hidden ring-1 ring-white/40 shadow-glass">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+         <div className="lg:col-span-2 glass p-10 rounded-[3rem] flex flex-col justify-center relative overflow-hidden ring-1 ring-white/40 shadow-glass">
             <div className="absolute -right-10 -bottom-10 opacity-5">
-               <span className="material-icons text-[15rem] font-black">inventory</span>
+               <span className="material-icons text-[12rem] font-black">inventory</span>
             </div>
             <div className="relative z-10">
-               <h2 className="text-5xl font-display font-black text-slate-800 tracking-[-0.06em]">Warehouse<br/><span className="text-indigo-600">Inventory</span> Flow</h2>
-               <p className="text-slate-400 font-bold mt-6 tracking-widest text-[11px] uppercase opacity-60 flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]"></span>
-                  Static Inventory Analysis Protocol
+               <h2 className="text-4xl font-display font-black text-slate-805 tracking-tight leading-none">Warehouse <span className="text-indigo-650">Inventory</span> Flow</h2>
+               <p className="text-slate-400 font-bold mt-4 tracking-wider text-[10px] uppercase opacity-75 flex items-center gap-1.5 font-display">
+                  <span className="w-2 h-2 rounded-full bg-indigo-500 shadow-[0_0_8px_rgba(79,70,229,0.4)]"></span>
+                  Static Inventory Analysis & Dual Compliance Cross-Check
                </p>
             </div>
          </div>
-         <div className="glass h-full p-10 rounded-[3.5rem] flex flex-col justify-center items-center text-center group ring-1 ring-white/40 shadow-glass bg-gradient-to-br from-indigo-50 to-transparent">
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-4">Current Network Load</p>
-            <div className="text-7xl font-display font-black text-slate-800 tracking-tighter group-hover:scale-110 transition-transform">
-               {filteredShipments.length}
+
+         {/* Bonded Double Check Stat */}
+         <div className="glass p-7 rounded-[3rem] flex flex-col justify-between ring-1 ring-white/40 bg-white shadow-sm">
+            <div>
+               <div className="flex justify-between items-start">
+                  <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Bonded Area Flow</span>
+                  <span className="text-[8px] font-black bg-amber-50 text-amber-600 px-2.5 py-0.5 rounded-full border border-amber-100 uppercase">
+                     {manualBondedSum > 0 ? "Synced" : "Manual Pending"}
+                  </span>
+               </div>
+               <div className="mt-4 flex items-baseline gap-2">
+                  <span className="text-4xl font-display font-black text-slate-800 tracking-tight">
+                     {filteredShipments.filter(s => s.bondedWarehouse && !s.bondedWarehouse.toUpperCase().includes('CLEARED')).length}
+                  </span>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase"> / {manualBondedSum} manual</span>
+               </div>
             </div>
-            <p className="text-xs font-bold text-indigo-600 mt-2 uppercase tracking-widest">Active Units</p>
+            <p className="text-[10px] font-bold text-slate-400 leading-tight mt-1.5">
+               Compare current active Bonded system units with manual declaration list.
+            </p>
+         </div>
+
+         {/* General Double Check Stat */}
+         <div className="glass p-7 rounded-[3rem] flex flex-col justify-between ring-1 ring-white/40 bg-white shadow-sm">
+            <div>
+               <div className="flex justify-between items-start">
+                  <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider">General Logistics Flow</span>
+                  <span className="text-[8px] font-black bg-indigo-50 text-indigo-600 px-2.5 py-0.5 rounded-full border border-indigo-100 uppercase">
+                     {manualGeneralSum > 0 ? "Synced" : "Manual Pending"}
+                  </span>
+               </div>
+               <div className="mt-4 flex items-baseline gap-2">
+                  <span className="text-4xl font-display font-black text-slate-800 tracking-tight">
+                     {filteredShipments.filter(s => s.generalWarehouse && !s.generalWarehouse.toUpperCase().includes('TRANSIT')).length}
+                  </span>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase"> / {manualGeneralSum} manual</span>
+               </div>
+            </div>
+            <p className="text-[10px] font-bold text-slate-400 leading-tight mt-1.5">
+               Compare current active General depot units with manual declaration list.
+            </p>
          </div>
       </div>
 

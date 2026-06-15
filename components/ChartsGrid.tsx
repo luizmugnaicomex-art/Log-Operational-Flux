@@ -233,6 +233,12 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
     const [inventoryUnit, setInventoryUnit] = useState<'containers' | 'bls'>('containers');
     const [inventoryOnly, setInventoryOnly] = useState<boolean>(false);
 
+    const averageDailyVolume = useMemo(() => {
+        if (!data.leadTimeTrend || data.leadTimeTrend.length === 0) return 0;
+        const totalVolume = data.leadTimeTrend.reduce((sum, item) => sum + (item.containerCount || 0), 0);
+        return Math.round((totalVolume / data.leadTimeTrend.length) * 10) / 10;
+    }, [data.leadTimeTrend]);
+
     const cargoReadyData = useMemo(() => {
         if (cargoReadyViewMode === 'days') return data.cargoReadyComparison;
 
@@ -589,6 +595,9 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                         <ReferenceLine y={150} stroke="#F59E0B" strokeDasharray="5 5" strokeWidth={2}>
                             <Label value="Goal: 150" position="right" fill="#F59E0B" fontSize={labelSize} fontWeight={900} />
                         </ReferenceLine>
+                        <ReferenceLine y={300} stroke="#EF4444" strokeDasharray="3 3" strokeWidth={2.5}>
+                            <Label value="Challenge: 300" position="left" fill="#EF4444" fontSize={labelSize} fontWeight={900} />
+                        </ReferenceLine>
                         <Bar dataKey="containerCount" name="Arrivals (Delivered)" cursor="pointer" radius={[6, 6, 0, 0]}>
                             <LabelList dataKey="containerCount" position="top" fontSize={labelSize} fill="#1e293b" fontWeight={900} />
                             {data.leadTimeTrend.map((entry, index) => {
@@ -722,6 +731,9 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                         <Legend wrapperStyle={{ fontSize: tickSize, fontWeight: 800, textTransform: 'uppercase', paddingTop: '20px' }} />
                         <ReferenceLine y={150} stroke="#F59E0B" strokeDasharray="5 5" strokeWidth={2}>
                             <Label value="Goal: 150" position="right" fill="#F59E0B" fontSize={labelSize} fontWeight={900} />
+                        </ReferenceLine>
+                        <ReferenceLine y={300} stroke="#EF4444" strokeDasharray="3 3" strokeWidth={2.5}>
+                            <Label value="Challenge: 300" position="left" fill="#EF4444" fontSize={labelSize} fontWeight={900} />
                         </ReferenceLine>
                         {carrierNames.map((name, index) => (
                             <Bar key={name} dataKey={name} stackId="volume" fill={getCarrierColor(name, index)}>
@@ -1126,10 +1138,16 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                 <ChartContainer
                     title={getChartMeta('daily_volume').title}
                     subtitle={getChartMeta('daily_volume').subtitle}
-                    headerRight={<div className="flex gap-2">
-                        <span className="flex items-center gap-1 text-[9px] font-black uppercase text-emerald-500"><span className="w-2 h-2 rounded-full bg-emerald-500"></span> Met</span>
-                        <span className="flex items-center gap-1 text-[9px] font-black uppercase text-slate-400"><span className="w-2 h-2 rounded-full bg-slate-400"></span> Missed</span>
-                        <span className="flex items-center gap-1 text-[9px] font-black uppercase text-indigo-500"><span className="w-2 h-2 rounded-full bg-indigo-500"></span> Weekend</span>
+                    headerRight={<div className="flex flex-col sm:flex-row items-end sm:items-center gap-4">
+                        <div className="bg-indigo-50/85 px-3 py-1 rounded-xl border border-indigo-100 flex items-center gap-1.5 shadow-sm">
+                            <span className="text-[9px] font-black uppercase text-indigo-600">DAILY AVG:</span>
+                            <span className="text-xs font-black text-slate-800">{averageDailyVolume} CNTR/day</span>
+                        </div>
+                        <div className="flex gap-2">
+                            <span className="flex items-center gap-1 text-[9px] font-black uppercase text-emerald-500"><span className="w-2 h-2 rounded-full bg-emerald-500"></span> Met</span>
+                            <span className="flex items-center gap-1 text-[9px] font-black uppercase text-slate-400"><span className="w-2 h-2 rounded-full bg-slate-400"></span> Missed</span>
+                            <span className="flex items-center gap-1 text-[9px] font-black uppercase text-indigo-500"><span className="w-2 h-2 rounded-full bg-indigo-500"></span> Weekend</span>
+                        </div>
                     </div>}
                     height={350}
                     onMaximize={() => setMaximizedChart('daily_volume')}
@@ -1421,6 +1439,12 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                                                 placeholder="Qty"
                                             />
                                         </div>
+                                    </div>
+                                )}
+                                {maximizedChart === 'daily_volume' && (
+                                    <div className="bg-indigo-50/80 px-4 py-2 rounded-xl border border-indigo-100 flex items-center gap-2">
+                                        <span className="text-[10px] font-black uppercase text-indigo-600">DAILY AVG:</span>
+                                        <span className="text-sm font-black text-slate-800">{averageDailyVolume} CNTR/day</span>
                                     </div>
                                 )}
                                 {maximizedChart === 'daily_warehouse_picked' && renderWarehouseStats()}

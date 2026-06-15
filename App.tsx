@@ -20,13 +20,14 @@ import { EmptyContainersPanel } from "./components/EmptyContainersPanel";
 import PortYardOperationStatus from "./components/PortYardOperationStatus";
 import BydExecReporter from "./components/BydExecReporter";
 import BydSeniorKpis from "./components/BydSeniorKpis";
+import { BacklogView } from "./components/BacklogView";
 
 // Utils
 import { processRawData, calculateDashboardData, toUTC, getISOWeek } from "./utils/dataProcessor";
 import { currencyFormatter } from "./utils/formatters";
 import { Shipment, SortConfig, PipelineWeek } from "./types";
 
-type MainView = "performance" | "goods_analysis" | "current_inventory" | "warehouse_status" | "vessel_matrix" | "demurrage_control" | "port_yard_status" | "exec_reporter" | "byd_kpis";
+type MainView = "performance" | "goods_analysis" | "current_inventory" | "warehouse_status" | "vessel_matrix" | "demurrage_control" | "port_yard_status" | "exec_reporter" | "byd_kpis" | "backlog";
 
 const isValidDate = (d: any): d is Date => d instanceof Date && !isNaN(d.getTime());
 
@@ -46,6 +47,7 @@ export default function App() {
   const [mainView, setMainView] = useState<MainView>("performance");
   const [mounted, setMounted] = useState(false);
   const [isStoragePanelMinimized, setIsStoragePanelMinimized] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -584,66 +586,106 @@ export default function App() {
 
   return (
     <div className={`min-h-screen font-sans antialiased print:bg-white overflow-x-clip ${isExporting ? 'is-exporting' : ''}`}>
-      <div className="flex w-full min-h-screen">
-        <div className={`flex-1 w-full transition-all flex flex-col ${isExporting ? '' : isStoragePanelMinimized ? 'pr-[80px]' : '2xl:pr-[360px] pr-[360px]'}`}>
-          {/* Premium Header / Sticky Dock */}
-          <header className="sticky top-0 z-[100] px-8 pt-6 no-export pointer-events-none">
-            <div className="mx-auto max-w-[1440px] flex items-center justify-between p-2 glass rounded-[2.5rem] ring-1 ring-white/40 shadow-2xl backdrop-blur-3xl pointer-events-auto">
-          <div className="flex items-center gap-6 pl-6">
-            <div className="bg-indigo-600 w-12 h-12 rounded-[1.25rem] flex items-center justify-center shadow-lg shadow-indigo-200 ring-1 ring-white/20">
-               <span className="material-icons text-white text-2xl">insights</span>
+      <div className="flex w-full min-h-screen relative">
+        {/* Responsive Overlay */}
+        {mobileMenuOpen && (
+          <div 
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs z-[80] lg:hidden no-export" 
+            onClick={() => setMobileMenuOpen(false)} 
+          />
+        )}
+
+        {/* Premium Left Sidebar */}
+        <aside className={`fixed inset-y-0 left-0 w-[285px] bg-slate-900 border-r border-slate-800 text-white z-[90] flex flex-col justify-between no-export shrink-0 transition-transform duration-300 transform ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
+          <div className="flex flex-col flex-1 min-h-0">
+            {/* Branding/Logo */}
+            <div className="flex items-center gap-4 px-6 py-8 border-b border-slate-800 bg-slate-950/20">
+              <div className="bg-indigo-600 w-11 h-11 rounded-[14px] flex items-center justify-center shadow-lg shadow-indigo-600/30 shrink-0">
+                <span className="material-icons text-white text-xl">insights</span>
+              </div>
+              <div>
+                <h1 className="text-base font-display font-black leading-none tracking-tight text-white flex items-center gap-1">
+                  Operational <span className="text-indigo-400">Flux</span>
+                </h1>
+                <p className="text-[8px] text-slate-500 font-black uppercase tracking-[0.25em] mt-1.5 leading-none">Intelligence v4.0</p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-xl font-display font-black leading-none tracking-tight text-slate-800">Operational <span className="text-indigo-600">Flux</span></h1>
-              <p className="text-[9px] text-slate-400 font-black uppercase tracking-[0.3em] mt-1 opacity-60">Intelligence v4.0</p>
-            </div>
+
+            {/* Navigation Menu */}
+            <nav className="flex-1 px-4 py-8 space-y-1.5 overflow-y-auto custom-scrollbar">
+              {[
+                { id: 'performance', label: 'Dashboard', icon: 'grid_view' },
+                { id: 'goods_analysis', label: 'Flow', icon: 'auto_graph' },
+                { id: 'current_inventory', label: 'Stock', icon: 'warehouse' },
+                { id: 'warehouse_status', label: 'Assets', icon: 'inventory_2' },
+                { id: 'vessel_matrix', label: 'Maritime', icon: 'sailing' },
+                { id: 'demurrage_control', label: 'Chronos', icon: 'schedule' },
+                { id: 'port_yard_status', label: 'Port & Yard', icon: 'precision_manufacturing' },
+                { id: 'exec_reporter', label: 'BYD Exec Plan', icon: 'assignment' },
+                { id: 'byd_kpis', label: 'BYD Senior KPI', icon: 'insights' },
+                { id: 'backlog', label: 'Backlog', icon: 'trending_up' }
+              ].map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => {
+                    setMainView(item.id as MainView);
+                    setMobileMenuOpen(false);
+                  }}
+                  className={`w-full flex items-center gap-3.5 px-4 py-3.5 rounded-xl text-left text-[11px] font-black uppercase tracking-wider transition-all relative ${mainView === item.id ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30 font-extrabold scale-[1.02]' : 'text-slate-400 hover:text-white hover:bg-slate-800/40'}`}
+                >
+                  <span className="material-icons text-lg shrink-0">{item.icon}</span>
+                  <span>{item.label}</span>
+                </button>
+              ))}
+            </nav>
           </div>
 
-          <nav className="flex items-center gap-1.5 p-1.5 glass-dark rounded-[1.75rem]">
-            {[
-              { id: 'performance', label: 'Dashboard', icon: 'grid_view' },
-              { id: 'goods_analysis', label: 'Flow', icon: 'auto_graph' },
-              { id: 'current_inventory', label: 'Stock', icon: 'warehouse' },
-              { id: 'warehouse_status', label: 'Assets', icon: 'inventory_2' },
-              { id: 'vessel_matrix', label: 'Maritime', icon: 'vessel' },
-              { id: 'demurrage_control', label: 'Chronos', icon: 'schedule' },
-              { id: 'port_yard_status', label: 'Port & Yard', icon: 'precision_manufacturing' },
-              { id: 'exec_reporter', label: 'BYD Exec Plan', icon: 'assignment' },
-              { id: 'byd_kpis', label: 'BYD Senior KPI', icon: 'insights' }
-            ].map((item) => (
-              <button
-                key={item.id}
-                onClick={() => setMainView(item.id as MainView)}
-                className={`flex items-center gap-2 px-6 py-2.5 rounded-[1.25rem] text-[10px] font-black uppercase tracking-[0.1em] transition-all relative ${mainView === item.id ? 'bg-white text-indigo-600 shadow-xl ring-1 ring-black/5 scale-[1.03]' : 'text-slate-500 hover:text-slate-800 hover:bg-white/40'}`}
-              >
-                {mainView === item.id && <motion.div layoutId="nav-glow" className="absolute inset-0 bg-indigo-500/10 rounded-[1.25rem] blur-xl" />}
-                <span className="material-icons text-lg">{item.icon}</span>
-                {item.label}
-              </button>
-            ))}
-          </nav>
-
-          <div className="flex items-center gap-3 pr-2">
+          {/* Sidebar CTA Footer */}
+          <div className="p-5 border-t border-slate-800 space-y-3 bg-slate-950/40">
             {shipments.length > 0 && (
               <div className="no-export">
-                <FileUpload onFileUpload={handleFileUpload} onError={setError} setIsLoading={setIsLoading} />
+                <FileUpload 
+                  onFileUpload={handleFileUpload} 
+                  onError={setError} 
+                  setIsLoading={setIsLoading} 
+                  customClass="w-full inline-flex items-center justify-center px-4 py-3.5 bg-slate-800/80 hover:bg-slate-800 text-white text-[10px] font-black uppercase tracking-widest rounded-xl cursor-pointer transition-colors border border-slate-700 hover:border-slate-600"
+                />
               </div>
             )}
             <motion.button 
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
               onClick={handleExportPPT} 
               disabled={isExporting || shipments.length === 0}
-              className={`flex items-center gap-3 px-8 py-3 rounded-[1.75rem] text-[10px] font-black uppercase tracking-[0.2em] transition-all shadow-lg ${isExporting ? 'bg-slate-700 text-slate-300' : 'bg-slate-900 hover:bg-black text-white shadow-indigo-100 disabled:opacity-50'}`}
+              className={`w-full flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg ${isExporting ? 'bg-slate-800 text-slate-500' : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-955/20 disabled:opacity-50'}`}
             >
-              <span className={`material-icons text-base ${isExporting ? 'animate-spin' : ''}`}>
+              <span className={`material-icons text-base shrink-0 ${isExporting ? 'animate-spin' : ''}`}>
                 {isExporting ? 'sync' : 'auto_graph'}
               </span>
-              {isExporting ? 'Export PPT' : 'Generate Intelligence'}
+              <span>{isExporting ? 'Exporting...' : 'Export PPT'}</span>
             </motion.button>
           </div>
-        </div>
-      </header>
+        </aside>
+
+        {/* Main Workspace Frame */}
+        <div className={`flex-1 w-full transition-all flex flex-col ${isExporting ? '' : `lg:pl-[285px] ${isStoragePanelMinimized ? 'pr-[80px]' : '2xl:pr-[360px] pr-[360px]'}`}`}>
+          {/* Mobile Header */}
+          <header className="lg:hidden flex items-center justify-between p-4 bg-white border-b border-slate-200 sticky top-0 z-40 no-export shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="bg-indigo-600 w-8 h-8 rounded-lg flex items-center justify-center shrink-0">
+                <span className="material-icons text-white text-base">insights</span>
+              </div>
+              <h1 className="text-sm font-display font-black leading-none text-slate-800">
+                Operational <span className="text-indigo-600">Flux</span>
+              </h1>
+            </div>
+            <button 
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="p-2 text-slate-600 hover:text-indigo-600 transition-colors focus:outline-none"
+            >
+              <span className="material-icons text-2xl">menu</span>
+            </button>
+          </header>
 
       <main className="mx-auto max-w-[1440px] p-8 main-content w-full relative">
         
@@ -749,6 +791,8 @@ export default function App() {
           <BydExecReporter shipments={filteredShipments} />
         ) : mainView === "byd_kpis" ? (
           <BydSeniorKpis shipments={filteredShipments} />
+        ) : mainView === "backlog" ? (
+          <BacklogView shipments={filteredShipments} />
         ) : null}
         </AnimatePresence>
       </main>
