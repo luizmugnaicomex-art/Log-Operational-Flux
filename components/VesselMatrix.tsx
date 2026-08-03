@@ -7,7 +7,9 @@ interface VesselMatrixProps {
   shipments: Shipment[];
 }
 
-const VesselMatrix: React.FC<VesselMatrixProps> = ({ shipments }) => {
+const isValidDate = (d: any): d is Date => d instanceof Date && !isNaN(d.getTime());
+
+const VesselMatrix: React.FC<VesselMatrixProps> = ({ shipments = [] }) => {
   const [selectedVessels, setSelectedVessels] = useState<string[]>([]);
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
   const [selectedIncoterms, setSelectedIncoterms] = useState<string[]>([]);
@@ -17,8 +19,12 @@ const VesselMatrix: React.FC<VesselMatrixProps> = ({ shipments }) => {
   const [endDate, setEndDate] = useState<string>('');
   
   const [observations, setObservations] = useState<Record<string, string>>(() => {
-    const saved = localStorage.getItem('vesselObservations');
-    return saved ? JSON.parse(saved) : {};
+    try {
+      const saved = localStorage.getItem('vesselObservations');
+      return saved ? JSON.parse(saved) : {};
+    } catch (e) {
+      return {};
+    }
   });
 
   const handleObservationChange = (vessel: string, value: string) => {
@@ -40,13 +46,16 @@ const VesselMatrix: React.FC<VesselMatrixProps> = ({ shipments }) => {
   const [modalConfig, setModalConfig] = useState<ModalViewConfig>(null);
 
   const uniqueVesselNames = useMemo(() => {
-    const names = new Set(shipments.map(s => s.vesselName?.trim().toUpperCase()).filter(v => v));
-    return Array.from(names).sort() as string[];
+    if (!Array.isArray(shipments)) return [];
+    const names = new Set(shipments.map(s => s?.vesselName?.trim().toUpperCase()).filter((v): v is string => Boolean(v)));
+    return Array.from(names).sort();
   }, [shipments]);
 
   const uniqueStatusesTotal = useMemo(() => {
+    if (!Array.isArray(shipments)) return [];
     const statuses = new Set<string>();
     shipments.forEach(s => {
+      if (!s) return;
       const comexStatus = s.statusComex?.trim().toUpperCase();
       if (comexStatus) {
         statuses.add(comexStatus);
@@ -56,12 +65,13 @@ const VesselMatrix: React.FC<VesselMatrixProps> = ({ shipments }) => {
         else statuses.add("UNKNOWN STATUS");
       }
     });
-    return Array.from(statuses).sort() as string[];
+    return Array.from(statuses).sort();
   }, [shipments]);
 
   const uniqueIncoterms = useMemo(() => {
-    const incoterms = new Set(shipments.map(s => s.incoterm?.trim().toUpperCase()).filter(i => i));
-    return Array.from(incoterms).sort() as string[];
+    if (!Array.isArray(shipments)) return [];
+    const incoterms = new Set(shipments.map(s => s?.incoterm?.trim().toUpperCase()).filter((i): i is string => Boolean(i)));
+    return Array.from(incoterms).sort();
   }, [shipments]);
 
   const handleClearFilters = () => {
@@ -73,7 +83,10 @@ const VesselMatrix: React.FC<VesselMatrixProps> = ({ shipments }) => {
   };
 
   const filteredShipments = useMemo(() => {
+    if (!Array.isArray(shipments)) return [];
     return shipments.filter(s => {
+      if (!s) return false;
+
       if (selectedVessels.length > 0) {
         const vName = s.vesselName?.trim().toUpperCase();
         if (!vName || !selectedVessels.includes(vName)) return false;
@@ -91,17 +104,21 @@ const VesselMatrix: React.FC<VesselMatrixProps> = ({ shipments }) => {
       
       if (startDate || endDate) {
         const eta = s.ata || s.estimatedDelivery;
-        if (!eta) return (startDate === '' && endDate === ''); // Skip if dates are required but no ETA exists
+        if (!eta || !isValidDate(eta)) return (startDate === '' && endDate === '');
         
         if (startDate) {
           const sd = new Date(startDate);
-          sd.setUTCHours(0, 0, 0, 0);
-          if (eta < sd) return false;
+          if (isValidDate(sd)) {
+            sd.setUTCHours(0, 0, 0, 0);
+            if (eta < sd) return false;
+          }
         }
         if (endDate) {
           const ed = new Date(endDate);
-          ed.setUTCHours(23, 59, 59, 999);
-          if (eta > ed) return false;
+          if (isValidDate(ed)) {
+            ed.setUTCHours(23, 59, 59, 999);
+            if (eta > ed) return false;
+          }
         }
       }
       
@@ -140,38 +157,41 @@ const VesselMatrix: React.FC<VesselMatrixProps> = ({ shipments }) => {
         return acc;
     }, {} as Record<string, { capacity: number, current: number, future: number }>);
 
-    filteredShipments.forEach(s => {
-        let warehouse = s.bondedWarehouse && s.bondedWarehouse.toUpperCase() !== 'UNKNOWN' ? s.bondedWarehouse.trim().toUpperCase() : "";
-        if (!warehouse) {
-            warehouse = s.generalWarehouse ? s.generalWarehouse.trim().toUpperCase() : "";
-        }
-        
-        let matchedWh: string | undefined = undefined;
-        if (warehouse.includes('INTERMARITIMA') || warehouse.includes('INTER ARCO') || warehouse.includes('INTERMAR')) matchedWh = 'INTERMARITIMA';
-        else if (warehouse.includes('TECON') || warehouse.includes('TECOM') || warehouse.includes('WILSON')) matchedWh = 'TECON';
-        else if (warehouse.includes('AG') || warehouse.includes('SEDEX') || warehouse.includes('CDEX')) matchedWh = 'AG - INTER CDEX';
-        else if (warehouse.includes('TPC')) matchedWh = 'TPC';
-        else if (warehouse.includes('CLIA') || warehouse.includes('EMPORIO')) matchedWh = 'CLIA';
-        else if (warehouse.includes('BUFFER') || warehouse.includes('TERCAM') || warehouse.includes('BUFFER-TERCAM')) matchedWh = 'BUFFER - TERCAM';
+    if (Array.isArray(filteredShipments)) {
+      filteredShipments.forEach(s => {
+          if (!s) return;
+          let warehouse = s.bondedWarehouse && s.bondedWarehouse.toUpperCase() !== 'UNKNOWN' ? s.bondedWarehouse.trim().toUpperCase() : "";
+          if (!warehouse) {
+              warehouse = s.generalWarehouse ? s.generalWarehouse.trim().toUpperCase() : "";
+          }
+          
+          let matchedWh: string | undefined = undefined;
+          if (warehouse.includes('INTERMARITIMA') || warehouse.includes('INTER ARCO') || warehouse.includes('INTERMAR')) matchedWh = 'INTERMARITIMA';
+          else if (warehouse.includes('TECON') || warehouse.includes('TECOM') || warehouse.includes('WILSON')) matchedWh = 'TECON';
+          else if (warehouse.includes('AG') || warehouse.includes('SEDEX') || warehouse.includes('CDEX')) matchedWh = 'AG - INTER CDEX';
+          else if (warehouse.includes('TPC')) matchedWh = 'TPC';
+          else if (warehouse.includes('CLIA') || warehouse.includes('EMPORIO')) matchedWh = 'CLIA';
+          else if (warehouse.includes('BUFFER') || warehouse.includes('TERCAM') || warehouse.includes('BUFFER-TERCAM')) matchedWh = 'BUFFER - TERCAM';
 
-        if (!matchedWh) return;
+          if (!matchedWh) return;
 
-        // If it has a delivery date, it's gone
-        if (s.deliveryByd) return;
+          // If it has a delivery date, it's gone
+          if (s.deliveryByd) return;
 
-        const status = (s.statusComex && s.statusComex.trim() !== '') 
-            ? s.statusComex.trim().toUpperCase() 
-            : ((s.status && s.status.trim() !== '') ? s.status.trim().toUpperCase() : "UNKNOWN STATUS");
+          const status = (s.statusComex && s.statusComex.trim() !== '') 
+              ? s.statusComex.trim().toUpperCase() 
+              : ((s.status && s.status.trim() !== '') ? s.status.trim().toUpperCase() : "UNKNOWN STATUS");
 
-        // Ignore CARGO DELIVERED
-        if (status === "CARGO DELIVERED" || status === "DELIVERED") return;
+          // Ignore CARGO DELIVERED
+          if (status === "CARGO DELIVERED" || status === "DELIVERED") return;
 
-        const isCurrent = currentStatuses.includes(status);
-        const isFuture = futureStatuses.includes(status);
+          const isCurrent = currentStatuses.includes(status);
+          const isFuture = futureStatuses.includes(status);
 
-        if (isCurrent) summary[matchedWh].current += 1;
-        if (isFuture) summary[matchedWh].future += 1;
-    });
+          if (isCurrent) summary[matchedWh].current += 1;
+          if (isFuture) summary[matchedWh].future += 1;
+      });
+    }
 
     let totalCap = 0; let totalCurr = 0; let totalFut = 0;
     
@@ -231,16 +251,17 @@ const VesselMatrix: React.FC<VesselMatrixProps> = ({ shipments }) => {
   }, [filteredShipments]);
 
   const matchingShipments = useMemo(() => {
-    if (!modalConfig) return [];
+    if (!modalConfig || !Array.isArray(filteredShipments)) return [];
     
     return filteredShipments.filter(s => {
+      if (!s) return false;
       const vessel = s.vesselName && s.vesselName.trim() !== '' ? s.vesselName.trim().toUpperCase() : "UNKNOWN VESSEL";
       const etaDate = s.ata || s.estimatedDelivery;
-      const etaStr = etaDate && !isNaN(etaDate.getTime()) ? etaDate.toISOString().split('T')[0] : 'UNKNOWN_ETA';
+      const etaStr = etaDate && isValidDate(etaDate) ? etaDate.toISOString().split('T')[0] : 'UNKNOWN_ETA';
       
       const sStatus = (s.statusComex && s.statusComex.trim() !== '') 
-            ? s.statusComex.trim().toUpperCase() 
-            : ((s.status && s.status.trim() !== '') ? s.status.trim().toUpperCase() : "UNKNOWN STATUS");
+          ? s.statusComex.trim().toUpperCase() 
+          : ((s.status && s.status.trim() !== '') ? s.status.trim().toUpperCase() : "UNKNOWN STATUS");
             
       let sWarehouse = s.bondedWarehouse && s.bondedWarehouse.toUpperCase() !== 'UNKNOWN' ? s.bondedWarehouse.trim().toUpperCase() : "";
       if (!sWarehouse) {
@@ -273,7 +294,7 @@ const VesselMatrix: React.FC<VesselMatrixProps> = ({ shipments }) => {
          return true;
       }
 
-      const targetEtaStr = modalConfig.eta && !isNaN(modalConfig.eta.getTime()) ? modalConfig.eta.toISOString().split('T')[0] : 'UNKNOWN_ETA';
+      const targetEtaStr = modalConfig.eta && isValidDate(modalConfig.eta) ? modalConfig.eta.toISOString().split('T')[0] : 'UNKNOWN_ETA';
 
       if (['vessel_total', 'vessel_status', 'vessel_warehouse'].includes(modalConfig.type)) {
          if (vessel !== modalConfig.vessel || etaStr !== targetEtaStr) return false;
@@ -299,7 +320,7 @@ const VesselMatrix: React.FC<VesselMatrixProps> = ({ shipments }) => {
     });
   }, [modalConfig, filteredShipments]);
 
-  if (!matrixData || matrixData.rows.length === 0) {
+  if (!matrixData || !matrixData.rows || matrixData.rows.length === 0) {
     return (
       <div className="flex flex-col h-full glass rounded-[3.5rem] p-12 text-center items-center justify-center min-h-[400px]">
          <div className="bg-slate-100 p-8 rounded-full mb-6 text-slate-300">
@@ -307,7 +328,7 @@ const VesselMatrix: React.FC<VesselMatrixProps> = ({ shipments }) => {
          </div>
          <h2 className="text-3xl font-display font-black text-slate-800">No Maritime Data</h2>
          <p className="text-slate-400 mt-4 max-w-sm">Use the filters above to refine your search or upload a dataset to begin maritime matrix analysis.</p>
-         <button onClick={handleClearFilters} className="mt-8 px-8 py-3 bg-indigo-600 text-white rounded-full font-black uppercase text-[10px] tracking-widest hover:bg-indigo-700 shadow-xl shadow-indigo-100 transition-all">Reset Matrix View</button>
+         <button onClick={handleClearFilters} className="mt-8 px-8 py-3 bg-indigo-600 text-white rounded-full font-black uppercase text-[10px] tracking-widest hover:bg-indigo-700 shadow-xl shadow-indigo-100 transition-all cursor-pointer">Reset Matrix View</button>
       </div>
     );
   }
@@ -315,7 +336,7 @@ const VesselMatrix: React.FC<VesselMatrixProps> = ({ shipments }) => {
   const { rows, uniqueStatuses, uniqueWarehouses, grandTotals } = matrixData;
 
   const formatDate = (date: Date | null) => {
-    if (!date) return '-';
+    if (!date || !isValidDate(date)) return '-';
     return date.toLocaleDateString('en-GB'); // dd/mm/yyyy
   };
 
@@ -339,7 +360,7 @@ const VesselMatrix: React.FC<VesselMatrixProps> = ({ shipments }) => {
       animate={{ opacity: 1, y: 0 }}
       className="flex flex-col gap-10"
     >
-      {/* Terminal Infrastructure Summary - Bento Bento View */}
+      {/* Terminal Infrastructure Summary - Bento View */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
          <div className="lg:col-span-12 glass p-10 rounded-[3.5rem] ring-1 ring-white/40 shadow-glass overflow-hidden relative">
             <div className="absolute top-0 right-0 p-10 opacity-5">
@@ -386,7 +407,7 @@ const VesselMatrix: React.FC<VesselMatrixProps> = ({ shipments }) => {
                         <div className="relative h-2 bg-slate-200/50 rounded-full overflow-hidden">
                            <div 
                               className={`h-full rounded-full transition-all duration-1000 ${w.isCollapsed ? 'bg-red-500' : 'bg-indigo-500'}`} 
-                              style={{ width: `${Math.min(100, (w.forecastValue / w.capacity) * 100)}%` }}
+                              style={{ width: `${Math.min(100, w.capacity > 0 ? (w.forecastValue / w.capacity) * 100 : 0)}%` }}
                            />
                         </div>
                         <div className="flex justify-between items-center text-[9px] font-black uppercase tracking-tighter gap-2">
@@ -410,7 +431,7 @@ const VesselMatrix: React.FC<VesselMatrixProps> = ({ shipments }) => {
          </div>
       </div>
 
-      {/* Main Vessel Matrix Matrix */}
+      {/* Main Vessel Matrix */}
       <div className="glass p-12 rounded-[3.5rem] ring-1 ring-white/40 shadow-glass min-h-[600px] flex flex-col">
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-10 mb-12">
           <div>
@@ -418,7 +439,7 @@ const VesselMatrix: React.FC<VesselMatrixProps> = ({ shipments }) => {
               <h2 className="text-4xl font-display font-black text-slate-800 tracking-[-0.04em]">Maritime <span className="text-indigo-600">Flux</span> Matrix</h2>
               <button 
                   onClick={handleExportMatrix}
-                  className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full text-[10px] font-black uppercase tracking-widest transition-all shadow-lg active:scale-95"
+                  className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full text-[10px] font-black uppercase tracking-widest transition-all shadow-lg active:scale-95 cursor-pointer"
               >
                   <span className="material-icons text-base">download</span>
                   Extract Matrix
@@ -528,7 +549,7 @@ const VesselMatrix: React.FC<VesselMatrixProps> = ({ shipments }) => {
             {(selectedVessels.length > 0 || selectedStatuses.length > 0 || selectedIncoterms.length > 0 || startDate || endDate) && (
               <button 
                 onClick={handleClearFilters}
-                className="w-10 h-10 rounded-full bg-red-50 text-red-500 flex items-center justify-center hover:bg-red-500 hover:text-white transition-all shadow-sm shadow-red-100"
+                className="w-10 h-10 rounded-full bg-red-50 text-red-500 flex items-center justify-center hover:bg-red-500 hover:text-white transition-all shadow-sm shadow-red-100 cursor-pointer"
               >
                 <span className="material-icons text-lg font-black">close</span>
               </button>
@@ -694,7 +715,7 @@ const VesselMatrix: React.FC<VesselMatrixProps> = ({ shipments }) => {
               </div>
               <button 
                 onClick={() => setModalConfig(null)}
-                className="bg-slate-100 text-slate-500 hover:bg-slate-900 hover:text-white w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-inner"
+                className="bg-slate-100 text-slate-500 hover:bg-slate-900 hover:text-white w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-inner cursor-pointer"
               >
                 <span className="material-icons">close</span>
               </button>
@@ -716,7 +737,7 @@ const VesselMatrix: React.FC<VesselMatrixProps> = ({ shipments }) => {
                     <div className="space-y-4">
                        <div className="flex justify-between items-center pb-3 border-b border-slate-100">
                           <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Master BL</span>
-                          <span className="text-xs font-black text-slate-800">{s.billOfLading || s.blNumber || '-'}</span>
+                          <span className="text-xs font-black text-slate-800">{s.billOfLading || (s as any).blNumber || '-'}</span>
                        </div>
                        <div className="flex justify-between items-center pb-3 border-b border-slate-100">
                           <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Maritime Unit</span>
@@ -726,7 +747,7 @@ const VesselMatrix: React.FC<VesselMatrixProps> = ({ shipments }) => {
                           <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Strategic Log</span>
                           <span className="text-xs font-black text-indigo-600 uppercase tracking-tighter text-right leading-none">{s.statusComex || s.status || '-'}</span>
                        </div>
-                       {s.deliveryByd && (
+                       {s.deliveryByd && isValidDate(s.deliveryByd) && (
                          <div className="flex justify-between items-center pt-2">
                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Release Date</span>
                            <span className="text-xs font-black text-emerald-600">
@@ -751,7 +772,7 @@ const VesselMatrix: React.FC<VesselMatrixProps> = ({ shipments }) => {
             <div className="px-12 py-8 bg-white border-t border-slate-100 flex justify-end sticky bottom-0 z-10">
                <button 
                  onClick={() => setModalConfig(null)}
-                 className="px-12 py-4 bg-slate-900 hover:bg-black text-white rounded-full font-black uppercase text-[10px] tracking-[0.3em] shadow-2xl transition-all active:scale-95"
+                 className="px-12 py-4 bg-slate-900 hover:bg-black text-white rounded-full font-black uppercase text-[10px] tracking-[0.3em] shadow-2xl transition-all active:scale-95 cursor-pointer"
                >
                  Close Protocol
                </button>

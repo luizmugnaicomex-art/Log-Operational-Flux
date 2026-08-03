@@ -23,12 +23,16 @@ interface PortYardOperationStatusProps {
     shipments: Shipment[];
 }
 
-export const PortYardOperationStatus: React.FC<PortYardOperationStatusProps> = ({ shipments }) => {
+const isValidDate = (d: any): d is Date => d instanceof Date && !isNaN(d.getTime());
+
+export const PortYardOperationStatus: React.FC<PortYardOperationStatusProps> = ({ shipments = [] }) => {
     // 1. Calculate Real Daily Port Arrived Volume (based on ATA)
     const dailyPortArrivals = useMemo(() => {
+        if (!Array.isArray(shipments)) return [];
         const counts: Record<string, number> = {};
+        
         shipments.forEach(s => {
-            if (s.ata) {
+            if (s && s.ata && isValidDate(s.ata)) {
                 const dateStr = s.ata.toISOString().split('T')[0];
                 counts[dateStr] = (counts[dateStr] || 0) + 1;
             }
@@ -42,9 +46,11 @@ export const PortYardOperationStatus: React.FC<PortYardOperationStatusProps> = (
 
     // 2. Real Daily Operation Delivery Trend (based on deliveryByd, matching dashboard)
     const dailyDeliveryTrend = useMemo(() => {
+        if (!Array.isArray(shipments)) return [];
         const counts: Record<string, number> = {};
+        
         shipments.forEach(s => {
-            if (s.deliveryByd) {
+            if (s && s.deliveryByd && isValidDate(s.deliveryByd)) {
                 const dateStr = s.deliveryByd.toISOString().split('T')[0];
                 counts[dateStr] = (counts[dateStr] || 0) + 1;
             }
@@ -58,19 +64,22 @@ export const PortYardOperationStatus: React.FC<PortYardOperationStatusProps> = (
 
     // Average delivered quantity of containers per day (for KPI indicator)
     const avgDeliveredCount = useMemo(() => {
-        if (dailyDeliveryTrend.length === 0) return 0;
-        const total = dailyDeliveryTrend.reduce((acc, curr) => acc + curr.count, 0);
+        if (!dailyDeliveryTrend || dailyDeliveryTrend.length === 0) return 0;
+        const total = dailyDeliveryTrend.reduce((acc, curr) => acc + (curr.count || 0), 0);
         return Math.round(total / dailyDeliveryTrend.length);
     }, [dailyDeliveryTrend]);
 
     // 3. Port Operation Distribution - Bonded vs General Warehouses used under current filter array
     const bondedDist = useMemo(() => {
+        if (!Array.isArray(shipments)) return [];
         const counts: Record<string, number> = {};
+        
         shipments.forEach(s => {
+            if (!s) return;
             const wh = s.bondedWarehouse || 'Cleared/Unassigned';
             counts[wh] = (counts[wh] || 0) + 1;
         });
-        // Vibrant professional colors
+        
         const colors = ['#2563EB', '#F59E0B', '#10B981', '#EC4899', '#8B5CF6', '#64748B'];
         return Object.entries(counts)
             .map(([name, value], idx) => ({
@@ -83,11 +92,15 @@ export const PortYardOperationStatus: React.FC<PortYardOperationStatusProps> = (
     }, [shipments]);
 
     const generalDist = useMemo(() => {
+        if (!Array.isArray(shipments)) return [];
         const counts: Record<string, number> = {};
+        
         shipments.forEach(s => {
+            if (!s) return;
             const wh = s.generalWarehouse || 'In Transit/Unassigned';
             counts[wh] = (counts[wh] || 0) + 1;
         });
+        
         const colors = ['#4F46E5', '#10B981', '#F59E0B', '#EF4444', '#EC4899', '#64748B'];
         return Object.entries(counts)
             .map(([name, value], idx) => ({
@@ -101,7 +114,8 @@ export const PortYardOperationStatus: React.FC<PortYardOperationStatusProps> = (
 
     // Active port dwell counts (arrived but not delivered yet)
     const activePortDwell = useMemo(() => {
-        return shipments.filter(s => s.ata && !s.deliveryByd).length;
+        if (!Array.isArray(shipments)) return 0;
+        return shipments.filter(s => s && s.ata && isValidDate(s.ata) && !s.deliveryByd).length;
     }, [shipments]);
 
     return (
@@ -114,7 +128,7 @@ export const PortYardOperationStatus: React.FC<PortYardOperationStatusProps> = (
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
                <div className="lg:col-span-2 glass p-10 rounded-[3rem] flex flex-col justify-center relative overflow-hidden ring-1 ring-white/40 shadow-glass bg-gradient-to-br from-indigo-50/50 to-transparent">
                   <div className="absolute -right-10 -bottom-10 opacity-5">
-                     <span className="material-icons text-[15rem] font-black">锚</span>
+                     <span className="material-icons text-[15rem] font-black">anchor</span>
                   </div>
                   <div className="relative z-10">
                      <div className="flex items-center gap-2 mb-2">
@@ -166,7 +180,7 @@ export const PortYardOperationStatus: React.FC<PortYardOperationStatusProps> = (
                </div>
             </div>
 
-            {/* Daily Port Operation Volume (Arrived containers based on real ATA dates) */}
+            {/* Daily Port Operation Volume */}
             <div className="glass p-10 rounded-[3.5rem] border-none shadow-glass ring-1 ring-white/40 bg-white">
                 <div className="mb-8 flex justify-between items-center">
                     <div>
@@ -193,7 +207,7 @@ export const PortYardOperationStatus: React.FC<PortYardOperationStatusProps> = (
                             <YAxis tick={{ fontSize: 10, fontWeight: 750, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
                             <Tooltip contentStyle={{ borderRadius: '1rem', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }} />
                             <Bar dataKey="count" name="Arrived Containers" fill="#2563EB" radius={[6, 6, 0, 0]} maxBarSize={32}>
-                                {dailyPortArrivals.map((entry, index) => (
+                                {dailyPortArrivals.map((_, index) => (
                                     <Cell key={`cell-${index}`} fill="#3B82F6" />
                                 ))}
                             </Bar>
@@ -202,7 +216,7 @@ export const PortYardOperationStatus: React.FC<PortYardOperationStatusProps> = (
                 </div>
             </div>
 
-            {/* Port Operation Distribution: Bonded & General side-by-side */}
+            {/* Port Operation Distribution */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 {/* Bonded Distribution */}
                 <div className="glass p-10 rounded-[3.5rem] border-none shadow-glass ring-1 ring-white/40 bg-white/70">
@@ -267,7 +281,7 @@ export const PortYardOperationStatus: React.FC<PortYardOperationStatusProps> = (
                 </div>
             </div>
 
-            {/* Daily Operation Trend (Pick-up quantities matching dashboard template precisely) */}
+            {/* Daily Operation Trend */}
             <div className="glass p-10 rounded-[3.5rem] border-none shadow-glass ring-1 ring-white/40 bg-white">
                 <div className="mb-8 flex justify-between items-center">
                     <div>
@@ -292,9 +306,8 @@ export const PortYardOperationStatus: React.FC<PortYardOperationStatusProps> = (
                                 tickLine={false} 
                             />
                             <YAxis tick={{ fontSize: 10, fontWeight: 750, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-                            <Tooltip contentStyle={{ borderRadius: '1rem', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }} />
+                            <Tooltip contentStyle={{ borderRadius: '1rem', border: 'none', shadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }} />
                             <Legend wrapperStyle={{ fontSize: '10px', textTransform: 'uppercase', paddingTop: '10px' }} />
-                            {/* Standard Goal limit visual references */}
                             <ReferenceLine y={150} stroke="#EF4444" strokeWidth={2} strokeDasharray="4 4" label={{ value: 'Daily Goal: 150', fill: '#EF4444', fontSize: 10, fontWeight: 'bold', position: 'top' }} />
                             <ReferenceLine y={300} stroke="#4F46E5" strokeWidth={2} strokeDasharray="4 4" label={{ value: 'Challenge Goal: 300', fill: '#4F46E5', fontSize: 10, fontWeight: 'bold', position: 'top' }} />
                             <Line type="monotone" dataKey="count" name="Delivered Containers (Daily)" stroke="#10B981" strokeWidth={3} dot={{ r: 5, fill: '#10B981' }} activeDot={{ r: 8 }} />

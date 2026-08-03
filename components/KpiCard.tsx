@@ -1,16 +1,15 @@
-
 import React from 'react';
 
 interface KpiCardProps {
     icon: string;
     title: string;
-    value: string;
+    value: string | number;
     unit?: string;
     color?: string;      // e.g. "text-red-600", "text-green-600"
     highlight?: boolean;
     onClick?: () => void;
     isActive?: boolean;
-    calculationLogic?: string; // New prop for calculation explanation
+    calculationLogic?: string; // Calculation explanation prop
 }
 
 const KpiCard: React.FC<KpiCardProps> = ({
@@ -24,27 +23,16 @@ const KpiCard: React.FC<KpiCardProps> = ({
     isActive = false,
     calculationLogic,
 }) => {
-    // Decide border/ring based on state
-    const borderClasses = (() => {
-        if (isActive) {
-            // Strong focus state (clicked KPI / drill-down active)
-            return 'border-red-600 ring-2 ring-red-200';
-        }
-        if (highlight) {
-            // Important KPI but not currently active
-            if (color.includes('red')) return 'border-red-500';
-            if (color.includes('amber') || color.includes('yellow')) return 'border-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.2)]';
-            return 'border-gray-300';
-        }
-        return 'border-gray-100';
-    })();
-
     // Value color: use KPI color only when highlight/active, otherwise neutral
     const valueColor = highlight || isActive ? color : 'text-gray-900';
 
     // Icon color: subtle when neutral, accent when highlight/active
-    const iconColor =
-        highlight || isActive ? color : 'text-gray-400';
+    const iconColor = highlight || isActive ? color : 'text-gray-400';
+
+    // Safe accent color replacement for gradient strip
+    const accentBgColor = (color || 'text-red-600').includes('text-') 
+        ? (color || 'text-red-600').replace('text-', 'bg-') 
+        : 'bg-red-600';
 
     // Hover/interactive behaviour
     const interactiveClasses = onClick
@@ -65,8 +53,8 @@ const KpiCard: React.FC<KpiCardProps> = ({
             {/* Subtle Texture/Pattern */}
             <div className="absolute inset-0 opacity-[0.03] pointer-events-none group-hover/card:opacity-[0.05] transition-opacity" style={{ backgroundImage: `radial-gradient(circle at 2px 2px, currentColor 1px, transparent 0)`, backgroundSize: '24px 24px' }}></div>
             
-            {/* Subtle Gradient Accent */}
-            <div className={`absolute top-0 left-0 w-2 h-full opacity-40 ${color.replace('text', 'bg')} transition-all group-hover/card:w-2.5 group-hover/card:opacity-70`} />
+            {/* Safe Gradient Accent */}
+            <div className={`absolute top-0 left-0 w-2 h-full opacity-40 ${accentBgColor} transition-all group-hover/card:w-2.5 group-hover/card:opacity-70`} />
 
             <div className="flex items-start justify-between relative z-10">
                 <div className="flex items-center w-full">
@@ -111,7 +99,7 @@ const KpiCard: React.FC<KpiCardProps> = ({
 
             <div className="mt-10 flex items-baseline relative z-10">
                 <p className={`text-5xl lg:text-6xl font-black tracking-[-0.04em] leading-tight font-display ${isActive ? 'text-indigo-600' : valueColor} transition-colors`}>
-                    {value}
+                    {value ?? '-'}
                     {unit && (
                         <span className="ml-2 text-xl font-bold text-slate-400/50 uppercase tracking-[0.1em] font-sans">
                             {unit}

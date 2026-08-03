@@ -31,14 +31,18 @@ interface StorageData {
     buffer: LocationCount[];
 }
 
-export const CurrentInventory: React.FC<CurrentInventoryProps> = ({ shipments }) => {
+export const CurrentInventory: React.FC<CurrentInventoryProps> = ({ shipments = [] }) => {
     // Inventory is only units that are NOT delivered.
-    const activeInventory = useMemo(() => shipments.filter(s => !s.deliveryByd), [shipments]);
+    const activeInventory = useMemo(() => {
+        if (!Array.isArray(shipments)) return [];
+        return shipments.filter(s => s && !s.deliveryByd);
+    }, [shipments]);
 
     // Group by General Warehouse (from System Excel upload)
     const generalWarehouseData = useMemo(() => {
         const counts: Record<string, number> = {};
         activeInventory.forEach(s => {
+            if (!s) return;
             const wh = s.generalWarehouse || 'In Transit / At Port (Unassigned)';
             counts[wh] = (counts[wh] || 0) + 1;
         });
@@ -51,6 +55,7 @@ export const CurrentInventory: React.FC<CurrentInventoryProps> = ({ shipments })
     const bondedWarehouseData = useMemo(() => {
         const counts: Record<string, number> = {};
         activeInventory.forEach(s => {
+            if (!s) return;
             const wh = s.bondedWarehouse || 'Cleared / unassigned';
             counts[wh] = (counts[wh] || 0) + 1;
         });
@@ -72,49 +77,57 @@ export const CurrentInventory: React.FC<CurrentInventoryProps> = ({ shipments })
         const stored = localStorage.getItem('emptyContainersDataV3');
         if (stored) {
             try {
-                setManualStorage(JSON.parse(stored));
-                setLastUpdated(new Date().toLocaleTimeString());
+                const parsed = JSON.parse(stored);
+                setManualStorage(prev => {
+                    const strPrev = JSON.stringify(prev);
+                    const strNew = JSON.stringify(parsed);
+                    if (strPrev !== strNew) {
+                        setLastUpdated(new Date().toLocaleTimeString());
+                        return parsed;
+                    }
+                    return prev;
+                });
             } catch (e) {
                 console.error("Failed to parse stored manual containers data", e);
             }
         }
     };
 
-    // Load from local storage on mount & establish interval
+    // Load from local storage on mount & establish a lightweight interval
     useEffect(() => {
         fetchManualStorage();
-        const interval = setInterval(fetchManualStorage, 2000);
+        const interval = setInterval(fetchManualStorage, 4000);
         return () => clearInterval(interval);
     }, []);
 
     // Aggregates for manual storage
     const manualBondedSum = useMemo(() => {
-        return manualStorage.bondedArea.reduce((acc, loc) => acc + loc.fullCount + loc.emptyCount, 0);
+        if (!manualStorage?.bondedArea) return 0;
+        return manualStorage.bondedArea.reduce((acc, loc) => acc + (loc.fullCount || 0) + (loc.emptyCount || 0), 0);
     }, [manualStorage]);
 
     const manualGeneralSum = useMemo(() => {
-        return manualStorage.warehouse.reduce((acc, loc) => acc + loc.fullCount + loc.emptyCount, 0);
+        if (!manualStorage?.warehouse) return 0;
+        return manualStorage.warehouse.reduce((acc, loc) => acc + (loc.fullCount || 0) + (loc.emptyCount || 0), 0);
     }, [manualStorage]);
 
     const manualBufferSum = useMemo(() => {
-        return manualStorage.buffer.reduce((acc, loc) => acc + loc.fullCount + loc.emptyCount, 0);
+        if (!manualStorage?.buffer) return 0;
+        return manualStorage.buffer.reduce((acc, loc) => acc + (loc.fullCount || 0) + (loc.emptyCount || 0), 0);
     }, [manualStorage]);
 
     const totalManualUnits = manualBondedSum + manualGeneralSum + manualBufferSum;
 
     // Aggregates for system excel
     const excelBondedSum = useMemo(() => {
-        // Exclude units that are cleared/unassigned to avoid bloat
-        return activeInventory.filter(s => s.bondedWarehouse && !s.bondedWarehouse.toUpperCase().includes('CLEARED')).length;
+        return activeInventory.filter(s => s && s.bondedWarehouse && !String(s.bondedWarehouse).toUpperCase().includes('CLEARED')).length;
     }, [activeInventory]);
 
     const excelGeneralSum = useMemo(() => {
-        // Exclude units in transit to get actual warehouse placements
-        return activeInventory.filter(s => s.generalWarehouse && !s.generalWarehouse.toUpperCase().includes('TRANSIT')).length;
+        return activeInventory.filter(s => s && s.generalWarehouse && !String(s.generalWarehouse).toUpperCase().includes('TRANSIT')).length;
     }, [activeInventory]);
 
     // Cross check comparison map
-    // We attempt to match locations dynamically by name lowercase.
     const crossCheckData = useMemo(() => {
         const matchResult: Array<{
             name: string;
@@ -127,18 +140,22 @@ export const CurrentInventory: React.FC<CurrentInventoryProps> = ({ shipments })
             status: 'MATCHING' | 'DISCREPANCY';
         }> = [];
 
+        const bondedAreaList = manualStorage?.bondedArea || [];
+        const warehouseList = manualStorage?.warehouse || [];
+
         // 1. Gather Bonded
         bondedWarehouseData.forEach(item => {
-            if (item.name.toUpperCase().includes('CLEARED') || item.name.toUpperCase().includes('N/A')) return;
+            const upperName = (item.name || '').toUpperCase();
+            if (upperName.includes('CLEARED') || upperName.includes('N/A')) return;
             
-            // Try to match in manual bondedArea
-            const manualMatch = manualStorage.bondedArea.find(loc => 
-                loc.name.toLowerCase().includes(item.name.toLowerCase()) || 
-                item.name.toLowerCase().includes(loc.name.toLowerCase())
-            );
+            const lowerItemName = item.name.toLowerCase();
+            const manualMatch = bondedAreaList.find(loc => {
+                const lowerLocName = (loc.name || '').toLowerCase();
+                return lowerLocName.includes(lowerItemName) || lowerItemName.includes(lowerLocName);
+            });
 
-            const manualFull = manualMatch ? manualMatch.fullCount : 0;
-            const manualEmpty = manualMatch ? manualMatch.emptyCount : 0;
+            const manualFull = manualMatch ? (manualMatch.fullCount || 0) : 0;
+            const manualEmpty = manualMatch ? (manualMatch.emptyCount || 0) : 0;
             const manualTotal = manualFull + manualEmpty;
             const discrepancy = item.count - manualTotal;
 
@@ -156,16 +173,17 @@ export const CurrentInventory: React.FC<CurrentInventoryProps> = ({ shipments })
 
         // 2. Gather General Warehouse
         generalWarehouseData.forEach(item => {
-            if (item.name.toUpperCase().includes('TRANSIT') || item.name.toUpperCase().includes('N/A') || item.name.toUpperCase().includes('PORT')) return;
+            const upperName = (item.name || '').toUpperCase();
+            if (upperName.includes('TRANSIT') || upperName.includes('N/A') || upperName.includes('PORT')) return;
 
-            // Try to match in manual warehouse
-            const manualMatch = manualStorage.warehouse.find(loc => 
-                loc.name.toLowerCase().includes(item.name.toLowerCase()) || 
-                item.name.toLowerCase().includes(loc.name.toLowerCase())
-            );
+            const lowerItemName = item.name.toLowerCase();
+            const manualMatch = warehouseList.find(loc => {
+                const lowerLocName = (loc.name || '').toLowerCase();
+                return lowerLocName.includes(lowerItemName) || lowerItemName.includes(lowerLocName);
+            });
 
-            const manualFull = manualMatch ? manualMatch.fullCount : 0;
-            const manualEmpty = manualMatch ? manualMatch.emptyCount : 0;
+            const manualFull = manualMatch ? (manualMatch.fullCount || 0) : 0;
+            const manualEmpty = manualMatch ? (manualMatch.emptyCount || 0) : 0;
             const manualTotal = manualFull + manualEmpty;
             const discrepancy = item.count - manualTotal;
 
@@ -182,16 +200,17 @@ export const CurrentInventory: React.FC<CurrentInventoryProps> = ({ shipments })
         });
 
         // 3. Match any leftover manual rows that didn't appear in excel data
-        manualStorage.bondedArea.forEach(loc => {
-            const alreadyMatched = matchResult.some(r => r.name.toLowerCase().includes(loc.name.toLowerCase()) || loc.name.toLowerCase().includes(r.name.toLowerCase()));
+        bondedAreaList.forEach(loc => {
+            const lowerLocName = (loc.name || '').toLowerCase();
+            const alreadyMatched = matchResult.some(r => r.name.toLowerCase().includes(lowerLocName) || lowerLocName.includes(r.name.toLowerCase()));
             if (!alreadyMatched) {
-                const total = loc.fullCount + loc.emptyCount;
+                const total = (loc.fullCount || 0) + (loc.emptyCount || 0);
                 matchResult.push({
                     name: loc.name,
                     type: 'BONDED',
                     excelCount: 0,
-                    manualFull: loc.fullCount,
-                    manualEmpty: loc.emptyCount,
+                    manualFull: loc.fullCount || 0,
+                    manualEmpty: loc.emptyCount || 0,
                     manualTotal: total,
                     discrepancy: -total,
                     status: -total === 0 ? 'MATCHING' : 'DISCREPANCY'
@@ -199,16 +218,17 @@ export const CurrentInventory: React.FC<CurrentInventoryProps> = ({ shipments })
             }
         });
 
-        manualStorage.warehouse.forEach(loc => {
-            const alreadyMatched = matchResult.some(r => r.name.toLowerCase().includes(loc.name.toLowerCase()) || loc.name.toLowerCase().includes(r.name.toLowerCase()));
+        warehouseList.forEach(loc => {
+            const lowerLocName = (loc.name || '').toLowerCase();
+            const alreadyMatched = matchResult.some(r => r.name.toLowerCase().includes(lowerLocName) || lowerLocName.includes(r.name.toLowerCase()));
             if (!alreadyMatched) {
-                const total = loc.fullCount + loc.emptyCount;
+                const total = (loc.fullCount || 0) + (loc.emptyCount || 0);
                 matchResult.push({
                     name: loc.name,
                     type: 'GENERAL',
                     excelCount: 0,
-                    manualFull: loc.fullCount,
-                    manualEmpty: loc.emptyCount,
+                    manualFull: loc.fullCount || 0,
+                    manualEmpty: loc.emptyCount || 0,
                     manualTotal: total,
                     discrepancy: -total,
                     status: -total === 0 ? 'MATCHING' : 'DISCREPANCY'
@@ -284,8 +304,8 @@ export const CurrentInventory: React.FC<CurrentInventoryProps> = ({ shipments })
                         {totalManualUnits}
                      </div>
                      <div className="flex gap-4 mt-3 text-[10px] font-bold text-slate-500">
-                        <span>Full: <strong className="text-slate-800 font-mono">{(manualStorage.bondedArea.reduce((a,c)=>a+c.fullCount,0) + manualStorage.warehouse.reduce((a,c)=>a+c.fullCount,0))}</strong></span>
-                        <span>Empty: <strong className="text-slate-800 font-mono">{(manualStorage.bondedArea.reduce((a,c)=>a+c.emptyCount,0) + manualStorage.warehouse.reduce((a,c)=>a+c.emptyCount,0))}</strong></span>
+                        <span>Full: <strong className="text-slate-800 font-mono">{((manualStorage?.bondedArea || []).reduce((a,c)=>a+(c.fullCount||0),0) + (manualStorage?.warehouse || []).reduce((a,c)=>a+(c.fullCount||0),0))}</strong></span>
+                        <span>Empty: <strong className="text-slate-800 font-mono">{((manualStorage?.bondedArea || []).reduce((a,c)=>a+(c.emptyCount||0),0) + (manualStorage?.warehouse || []).reduce((a,c)=>a+(c.emptyCount||0),0))}</strong></span>
                      </div>
                   </div>
                </div>

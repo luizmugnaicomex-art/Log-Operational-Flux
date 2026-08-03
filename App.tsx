@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from "react";
 
 // KPI Dashboard Imports
@@ -12,22 +11,20 @@ import ChartDetailsModal from "./components/ChartDetailsModal";
 import OperationalLotGrid from "./components/OperationalLotGrid";
 import PipelineAnalysis from "./components/PipelineAnalysis";
 import GoodsAnalysis from "./components/GoodsAnalysis";
-import { WarehouseStatusView } from "./components/WarehouseStatusView";
 import VesselMatrix from "./components/VesselMatrix";
 import { DemurrageControl } from "./components/DemurrageControl";
 import { CurrentInventory } from "./components/CurrentInventory";
 import { EmptyContainersPanel } from "./components/EmptyContainersPanel";
 import PortYardOperationStatus from "./components/PortYardOperationStatus";
-import BydExecReporter from "./components/BydExecReporter";
-import BydSeniorKpis from "./components/BydSeniorKpis";
 import { BacklogView } from "./components/BacklogView";
+import { WarehouseDistribution } from "./components/WarehouseDistribution";
 
 // Utils
 import { processRawData, calculateDashboardData, toUTC, getISOWeek } from "./utils/dataProcessor";
 import { currencyFormatter } from "./utils/formatters";
 import { Shipment, SortConfig, PipelineWeek } from "./types";
 
-type MainView = "performance" | "goods_analysis" | "current_inventory" | "warehouse_status" | "vessel_matrix" | "demurrage_control" | "port_yard_status" | "exec_reporter" | "byd_kpis" | "backlog";
+type MainView = "performance" | "goods_analysis" | "current_inventory" | "vessel_matrix" | "demurrage_control" | "port_yard_status" | "backlog" | "warehouse_distribution";
 
 const isValidDate = (d: any): d is Date => d instanceof Date && !isNaN(d.getTime());
 
@@ -93,16 +90,16 @@ export default function App() {
   const handleFileUpload = React.useCallback((data: any[][]) => {
     try {
       const processed = processRawData(data);
-      setShipments(processed.shipments);
-      setCarriersList(processed.carriers);
-      setAnalystsList(processed.analysts);
-      setCargosList(processed.cargos);
-      setContainerTypesList(processed.containerTypes);
-      setIncotermsList(processed.incoterms);
-      setRomaneioStatusesList(processed.romaneioStatuses);
-      setYearsList(processed.years);
-      setStatusComexList(processed.statusComexList);
-      setGeneralWarehouseList(processed.generalWarehouseList);
+      setShipments(processed.shipments || []);
+      setCarriersList(processed.carriers || []);
+      setAnalystsList(processed.analysts || []);
+      setCargosList(processed.cargos || []);
+      setContainerTypesList(processed.containerTypes || []);
+      setIncotermsList(processed.incoterms || []);
+      setRomaneioStatusesList(processed.romaneioStatuses || []);
+      setYearsList(processed.years || []);
+      setStatusComexList(processed.statusComexList || []);
+      setGeneralWarehouseList(processed.generalWarehouseList || []);
       setIsLoading(false);
       setError(null);
     } catch (err: any) {
@@ -112,18 +109,16 @@ export default function App() {
   }, []);
 
   const handleExportPPT = async () => {
-    if (shipments.length === 0) return;
+    if (!Array.isArray(shipments) || shipments.length === 0) return;
     setIsExporting(true);
     document.body.classList.add('is-exporting');
 
     try {
-      // Robust library detection for different build environments
       const PptxGen = (window as any).PptxGenJS;
       const pptx = typeof PptxGen === 'function' ? new PptxGen() : new (PptxGen as any).default();
       
       pptx.layout = 'LAYOUT_16x9';
 
-      // 1. Title Slide
       const titleSlide = pptx.addSlide();
       titleSlide.addText("Logistics KPI Command Center", { 
         x: 0, y: '40%', w: '100%', align: 'center', fontSize: 36, bold: true, color: '363636', fontFace: 'Arial'
@@ -132,31 +127,27 @@ export default function App() {
         x: 0, y: '55%', w: '100%', align: 'center', fontSize: 18, color: '888888', fontFace: 'Arial'
       });
 
-      // Slide workspace dimensions (inches) for 16:9 is 10 x 5.625
       const SLIDE_W = 10;
       const SLIDE_H = 5.625;
       const MARGIN = 0.4;
       const MAX_W = SLIDE_W - (MARGIN * 2);
       const MAX_H = SLIDE_H - (MARGIN * 2);
 
-      // Select sections to capture
       const sections = document.querySelectorAll('.export-section');
       
       for (const section of Array.from(sections)) {
         const canvas = await (window as any).html2canvas(section as HTMLElement, {
-          scale: 2.5, // High resolution
+          scale: 2.5,
           useCORS: true,
           backgroundColor: '#ffffff',
           logging: false,
           onclone: (clonedDoc: Document) => {
-             // Find the specific element in the cloned document
              const elementId = section.getAttribute('id');
              const selector = elementId ? `#${elementId}` : '.export-section';
              const el = clonedDoc.querySelector(selector);
              
              if (el) {
                 const htmlEl = el as HTMLElement;
-                // Standardize layout for export
                 htmlEl.style.width = '1200px';
                 htmlEl.style.height = 'auto';
                 htmlEl.style.padding = '40px';
@@ -170,7 +161,6 @@ export default function App() {
         const imageData = canvas.toDataURL('image/png', 1.0);
         const slide = pptx.addSlide();
 
-        // Calculate aspect ratio to prevent stretching
         const canvasW = canvas.width;
         const canvasH = canvas.height;
         const imgAspectRatio = canvasH / canvasW;
@@ -178,13 +168,11 @@ export default function App() {
         let finalW = MAX_W;
         let finalH = MAX_W * imgAspectRatio;
 
-        // If height is too much, scale down by height instead
         if (finalH > MAX_H) {
           finalH = MAX_H;
           finalW = MAX_H / imgAspectRatio;
         }
         
-        // Center the image in the slide
         slide.addImage({ 
           data: imageData, 
           x: (SLIDE_W - finalW) / 2, 
@@ -207,7 +195,9 @@ export default function App() {
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
   const filteredShipments = useMemo(() => {
+    if (!Array.isArray(shipments)) return [];
     return shipments.filter((s) => {
+      if (!s) return false;
       const matchCarrier = filters.carriers.length === 0 || (s.carrier && filters.carriers.includes(s.carrier));
       const matchAnalyst = filters.analysts.length === 0 || (s.analyst && filters.analysts.includes(s.analyst));
       const matchCargo = filters.cargos.length === 0 || (s.cargo && filters.cargos.includes(s.cargo));
@@ -215,11 +205,11 @@ export default function App() {
       const matchIncoterm = filters.incoterms.length === 0 || (s.incoterm && filters.incoterms.includes(s.incoterm));
       const matchRomaneio = filters.romaneioStatuses.length === 0 || (s.madeRomaneio && filters.romaneioStatuses.includes(s.madeRomaneio));
       
-      const date = s.deliveryByd || s.ata;
-      const matchYear = filters.year === "all" || (date && date.getFullYear().toString() === filters.year);
+      const date = (s.deliveryByd && isValidDate(s.deliveryByd)) ? s.deliveryByd : ((s.ata && isValidDate(s.ata)) ? s.ata : null);
+      const matchYear = filters.year === "all" || (date && isValidDate(date) && date.getFullYear().toString() === filters.year);
       
       let matchPeriod = true;
-      if (filters.period !== "all" && date) {
+      if (filters.period !== "all" && date && isValidDate(date)) {
         const month = date.getMonth();
         if (filters.period === "H1") matchPeriod = month < 6;
         else if (filters.period === "H2") matchPeriod = month >= 6;
@@ -229,7 +219,7 @@ export default function App() {
         else if (filters.period === "Q4") matchPeriod = month >= 9;
       }
 
-      const matchMonth = filters.month === "all" || (date && date.getMonth().toString() === filters.month);
+      const matchMonth = filters.month === "all" || (date && isValidDate(date) && date.getMonth().toString() === filters.month);
       const matchSearch = !debouncedSearchTerm || [s.containerNumber, s.carrier, s.vesselName, s.shipper, s.billOfLading].some(v => String(v || '').toLowerCase().includes(debouncedSearchTerm.toLowerCase()));
 
       return matchCarrier && matchAnalyst && matchCargo && matchType && matchIncoterm && matchRomaneio && matchYear && matchPeriod && matchMonth && matchSearch;
@@ -241,8 +231,8 @@ export default function App() {
       const valA = a[sortConfig.key];
       const valB = b[sortConfig.key];
       if (valA === valB) return 0;
-      if (valA === null) return 1;
-      if (valB === null) return -1;
+      if (valA === null || valA === undefined) return 1;
+      if (valB === null || valB === undefined) return -1;
       const res = valA < valB ? -1 : 1;
       return sortConfig.direction === "asc" ? res : -res;
     });
@@ -257,7 +247,7 @@ export default function App() {
 
   const handleLotClick = React.useCallback((model: string, dateLabel: string, batchNumber: string) => {
     const matchingShipments = filteredShipments.filter(s => {
-      if (!s || !s.deliveryByd) return false;
+      if (!s || !s.deliveryByd || !isValidDate(s.deliveryByd)) return false;
       const sDateStr = s.deliveryByd.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' });
       return sDateStr === dateLabel && s.batchNumber === batchNumber && s.cargoModel === model;
     });
@@ -269,13 +259,11 @@ export default function App() {
   }, [filteredShipments]);
 
   const handlePipelineWeekClick = (week: PipelineWeek) => {
-    // Filter shipments that arrive in this specific ISO week
     const matchingShipments = filteredShipments.filter(s => {
         if (!s) return false;
         const date = s.ata || s.estimatedDelivery;
         if (!isValidDate(date)) return false;
         
-        // Exact same logic as getISOWeek in dataProcessor.ts
         const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
         if (!isValidDate(d)) return false;
         
@@ -294,90 +282,9 @@ export default function App() {
     });
   };
 
-  // --- Drill-down Handlers for KPI Cards ---
-  const handleDemurrageClick = () => {
-    const demurrageShipments = filteredShipments.filter(s => s.demurrageCost > 0);
-    setModalData({
-      isOpen: true,
-      weekLabel: "Demurrage Cost Analysis",
-      shipments: demurrageShipments
-    });
-  };
-
-  const handleOnTimeClick = () => {
-    const onTimeShipments = filteredShipments.filter(s => s.deliveryByd && (s.clientDeliveryVariance || 0) <= 0);
-    setModalData({
-      isOpen: true,
-      weekLabel: "On-Time Deliveries",
-      shipments: onTimeShipments
-    });
-  };
-
-  const handleAtRiskClick = () => {
-    const atRiskShipments = filteredShipments.filter(s => s.detentionRisk !== null && s.detentionRisk > 0);
-    setModalData({
-      isOpen: true,
-      weekLabel: "Containers at Detention Risk",
-      shipments: atRiskShipments
-    });
-  };
-
-  const handleFlaggedClick = () => {
-    const todayUTC = new Date();
-    todayUTC.setHours(0,0,0,0);
-    const flaggedShipments = filteredShipments.filter(s => {
-        if (s.actualDepotReturnDate || !s.freeTimeDate) return false;
-        const freeTimeUTC = new Date(s.freeTimeDate);
-        freeTimeUTC.setHours(0,0,0,0);
-        const diffTime = freeTimeUTC.getTime() - todayUTC.getTime();
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        return diffDays >= 0 && diffDays <= 15;
-    });
-    setModalData({
-      isOpen: true,
-      weekLabel: "Flagged Containers (15 Days to Free Time)",
-      shipments: flaggedShipments
-    });
-  };
-
-  const handleProjectedClick = () => {
-    const todayUTC = toUTC(new Date());
-    const avgDrainRate = parseFloat(kpis.avgWeekdayVolume) || 1;
-    
-    const backlog = filteredShipments.filter(s => !s.deliveryByd).sort((a, b) => {
-        const dateA = a.cargoReadyDate || a.ata || new Date(0);
-        const dateB = b.cargoReadyDate || b.ata || new Date(0);
-        return dateA.getTime() - dateB.getTime();
-    });
-
-    const projectedShipments = backlog.filter((s, index) => {
-        const startDate = s.cargoReadyDate || s.ata;
-        if (!startDate) return false;
-        const daysAlreadyInBacklog = (todayUTC.getTime() - toUTC(startDate).getTime()) / (1000 * 60 * 60 * 24);
-        const estimatedDaysToDrain = index / avgDrainRate;
-        return (daysAlreadyInBacklog + estimatedDaysToDrain) > 10;
-    });
-
-    setModalData({
-      isOpen: true,
-      weekLabel: "Projected > 10 Days in Backlog",
-      shipments: projectedShipments
-    });
-  };
-
-  const handleClearanceClick = () => {
-    const clearanceShipments = filteredShipments.filter(s => s.totalClearanceTime !== null);
-    setModalData({
-      isOpen: true,
-      weekLabel: "Customs Clearance Performance",
-      shipments: clearanceShipments
-    });
-  };
-
   const isWeekFormat = (label: string) => /^W\d+\s*-/i.test(label);
 
   const getWeekRange = (label: string): { start: number, end: number } | null => {
-      // Find the matched week by date in charts (if we can)
       const parts = label.split(' - ');
       if (parts.length !== 2) return null;
       const weekPattern = parseInt(parts[0].replace('W', ''), 10);
@@ -386,45 +293,30 @@ export default function App() {
       const yearStart = new Date(Date.UTC(yearPattern, 0, 1));
       const dayNum = yearStart.getUTCDay() || 7;
       
-      // Calculate start of the requested week
       let startOfSelectedWeek = new Date(yearStart.getTime() + (weekPattern - 1) * 7 * 86400000);
-      // Adjust if it doesn't land on Monday perfectly
       const adjustDays = 1 - (startOfSelectedWeek.getUTCDay() || 7);
       startOfSelectedWeek = new Date(startOfSelectedWeek.getTime() + adjustDays * 86400000);
       
-      const endOfSelectedWeek = new Date(startOfSelectedWeek.getTime() + 6 * 86400000 + 86399999); // end of sunday
+      const endOfSelectedWeek = new Date(startOfSelectedWeek.getTime() + 6 * 86400000 + 86399999);
 
       return { start: startOfSelectedWeek.getTime(), end: endOfSelectedWeek.getTime() };
   };
 
-  const isDateInPeriod = (targetDate: Date | null, d: any) => {
-    // This is the optimized version that doesn't instantiate lots of objects
-    if (!targetDate || !d.date) return false;
-    // We already handle this optimally dynamically inline so we won't rewrite it fully 
-    // Actually, we can just replace usage with the optimized block. Let's keep it here for compatibility if used elsewhere.
-    if (isWeekFormat(d.label)) {
-        const { week, year } = getISOWeek(targetDate);
-        return d.label === `W${week} - ${year}`;
-    }
-    const dTarget = new Date(d.date).toISOString().split('T')[0];
-    return targetDate.toISOString().split('T')[0] === dTarget;
-  };
-
   const handleLeadTimeClick = (d: any) => {
-    const targetDate = d.date ? new Date(d.date).toISOString().split('T')[0] : null;
+    const targetDate = d?.date && isValidDate(new Date(d.date)) ? new Date(d.date).toISOString().split('T')[0] : null;
     if (!targetDate) return;
     const matching = filteredShipments.filter(s => {
-      if (!s.deliveryByd) return false;
+      if (!s || !s.deliveryByd || !isValidDate(s.deliveryByd)) return false;
       return s.deliveryByd.toISOString().split('T')[0] === targetDate;
     });
     setModalData({ isOpen: true, weekLabel: d.label, shipments: matching });
   };
 
   const handleCargoReadyClick = (d: any) => {
-    const targetDate = d.date ? new Date(d.date).toISOString().split('T')[0] : null;
+    const targetDate = d?.date && isValidDate(new Date(d.date)) ? new Date(d.date).toISOString().split('T')[0] : null;
     if (!targetDate) return;
     const matching = filteredShipments.filter(s => {
-      if (!s.cargoReadyDate) return false;
+      if (!s || !s.cargoReadyDate || !isValidDate(s.cargoReadyDate)) return false;
       return s.cargoReadyDate.toISOString().split('T')[0] === targetDate;
     });
     setModalData({
@@ -435,10 +327,10 @@ export default function App() {
   };
 
   const handleAtaClick = (d: any) => {
-    const targetDate = d.date ? new Date(d.date).toISOString().split('T')[0] : null;
+    const targetDate = d?.date && isValidDate(new Date(d.date)) ? new Date(d.date).toISOString().split('T')[0] : null;
     if (!targetDate) return;
     const matching = filteredShipments.filter(s => {
-      if (!s.ata) return false;
+      if (!s || !s.ata || !isValidDate(s.ata)) return false;
       return s.ata.toISOString().split('T')[0] === targetDate;
     });
     setModalData({
@@ -452,8 +344,9 @@ export default function App() {
     const period = d?.period || d?.payload?.period;
     if (!period) return;
     const matching = filteredShipments.filter(s => {
+      if (!s) return false;
       const date = s.ata || s.estimatedDelivery;
-      if (!date) return false;
+      if (!date || !isValidDate(date)) return false;
       const { week, year } = getISOWeek(date);
       return `W${week} - ${year}` === period;
     });
@@ -468,13 +361,14 @@ export default function App() {
     const todayUTC = toUTC(new Date());
 
     const matching = filteredShipments.filter(s => {
-      if (s.bondedWarehouse !== d.name || !s.ata || s.deliveryByd) return false;
+      if (!s || s.bondedWarehouse !== d.name || !s.ata || !isValidDate(s.ata) || s.deliveryByd) return false;
       const isFuture = toUTC(s.ata).getTime() > todayUTC.getTime();
       if (type === 'futureArrivals') return isFuture;
       if (type === 'arrivedNotPicked') return !isFuture;
       return true;
     });
     const groupedData = matching.reduce((acc, s) => {
+      if (!s) return acc;
       const vessel = s.vesselName || 'Unknown Vessel';
       const bl = s.billOfLading || 'Unknown BL';
       if (!acc[vessel]) acc[vessel] = {};
@@ -496,13 +390,13 @@ export default function App() {
   const handleCargoReadyInflowClick = (d: any) => {
     const isWeek = isWeekFormat(d.label);
     const weekRange = isWeek ? getWeekRange(d.label) : null;
-    const targetDateStr = d.date ? new Date(d.date).toISOString().split('T')[0] : null;
+    const targetDateStr = d?.date && isValidDate(new Date(d.date)) ? new Date(d.date).toISOString().split('T')[0] : null;
 
     const matching = filteredShipments.filter(s => {
-       if (!s.cargoReadyDate) return false;
+       if (!s || !s.cargoReadyDate || !isValidDate(s.cargoReadyDate)) return false;
        if (isWeek && weekRange) {
-           const t = s.cargoReadyDate.getTime();
-           return t >= weekRange.start && t <= weekRange.end;
+            const t = s.cargoReadyDate.getTime();
+            return t >= weekRange.start && t <= weekRange.end;
        }
        return s.cargoReadyDate.toISOString().split('T')[0] === targetDateStr;
     });
@@ -516,13 +410,13 @@ export default function App() {
   const handleDrainLineClick = (d: any) => {
     const isWeek = isWeekFormat(d.label);
     const weekRange = isWeek ? getWeekRange(d.label) : null;
-    const targetDateStr = d.date ? new Date(d.date).toISOString().split('T')[0] : null;
+    const targetDateStr = d?.date && isValidDate(new Date(d.date)) ? new Date(d.date).toISOString().split('T')[0] : null;
 
     const matching = filteredShipments.filter(s => {
-       if (!s.deliveryByd) return false;
+       if (!s || !s.deliveryByd || !isValidDate(s.deliveryByd)) return false;
        if (isWeek && weekRange) {
-           const t = s.deliveryByd.getTime();
-           return t >= weekRange.start && t <= weekRange.end;
+            const t = s.deliveryByd.getTime();
+            return t >= weekRange.start && t <= weekRange.end;
        }
        return s.deliveryByd.toISOString().split('T')[0] === targetDateStr;
     });
@@ -536,13 +430,13 @@ export default function App() {
   const handleVesselArrivalClick = (d: any) => {
     const isWeek = isWeekFormat(d.label);
     const weekRange = isWeek ? getWeekRange(d.label) : null;
-    const targetDateStr = d.date ? new Date(d.date).toISOString().split('T')[0] : null;
+    const targetDateStr = d?.date && isValidDate(new Date(d.date)) ? new Date(d.date).toISOString().split('T')[0] : null;
 
     const matching = filteredShipments.filter(s => {
-       if (!s.ata) return false;
+       if (!s || !s.ata || !isValidDate(s.ata)) return false;
        if (isWeek && weekRange) {
-           const t = s.ata.getTime();
-           return t >= weekRange.start && t <= weekRange.end;
+            const t = s.ata.getTime();
+            return t >= weekRange.start && t <= weekRange.end;
        }
        return s.ata.toISOString().split('T')[0] === targetDateStr;
     });
@@ -554,25 +448,22 @@ export default function App() {
   };
 
   const handleInventoryClick = (d: any) => {
-    // Inventory = Arrived - Delivered / Picked
-    const targetDateEndStr = d.date ? new Date(d.date).toISOString().split('T')[0] : null;
-
+    const targetDateEndStr = d?.date && isValidDate(new Date(d.date)) ? new Date(d.date).toISOString().split('T')[0] : null;
     if (!targetDateEndStr) return;
 
     const matching = filteredShipments.filter(s => {
-      if (!s.ata) return false; 
-      // We need to compare correctly if week range is active
+      if (!s || !s.ata || !isValidDate(s.ata)) return false; 
       const isWeek = isWeekFormat(d.label);
       if (isWeek) {
-         const weekRange = getWeekRange(d.label);
-         if (!weekRange) return false;
-         const arrivedTime = s.ata.getTime();
-         const pickedTime = s.deliveryByd ? s.deliveryByd.getTime() : null;
-         return arrivedTime <= weekRange.end && (!pickedTime || pickedTime > weekRange.end);
+          const weekRange = getWeekRange(d.label);
+          if (!weekRange) return false;
+          const arrivedTime = s.ata.getTime();
+          const pickedTime = s.deliveryByd && isValidDate(s.deliveryByd) ? s.deliveryByd.getTime() : null;
+          return arrivedTime <= weekRange.end && (!pickedTime || pickedTime > weekRange.end);
       }
       
       const arrivedDate = s.ata.toISOString().split('T')[0];
-      const pickedDate = s.deliveryByd ? s.deliveryByd.toISOString().split('T')[0] : null;
+      const pickedDate = s.deliveryByd && isValidDate(s.deliveryByd) ? s.deliveryByd.toISOString().split('T')[0] : null;
 
       return arrivedDate <= targetDateEndStr && (!pickedDate || pickedDate > targetDateEndStr);
     });
@@ -587,7 +478,6 @@ export default function App() {
   return (
     <div className={`min-h-screen font-sans antialiased print:bg-white overflow-x-clip ${isExporting ? 'is-exporting' : ''}`}>
       <div className="flex w-full min-h-screen relative">
-        {/* Responsive Overlay */}
         {mobileMenuOpen && (
           <div 
             className="fixed inset-0 bg-black/60 backdrop-blur-xs z-[80] lg:hidden no-export" 
@@ -598,7 +488,6 @@ export default function App() {
         {/* Premium Left Sidebar */}
         <aside className={`fixed inset-y-0 left-0 w-[285px] bg-slate-900 border-r border-slate-800 text-white z-[90] flex flex-col justify-between no-export shrink-0 transition-transform duration-300 transform ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
           <div className="flex flex-col flex-1 min-h-0">
-            {/* Branding/Logo */}
             <div className="flex items-center gap-4 px-6 py-8 border-b border-slate-800 bg-slate-950/20">
               <div className="bg-indigo-600 w-11 h-11 rounded-[14px] flex items-center justify-center shadow-lg shadow-indigo-600/30 shrink-0">
                 <span className="material-icons text-white text-xl">insights</span>
@@ -611,18 +500,15 @@ export default function App() {
               </div>
             </div>
 
-            {/* Navigation Menu */}
             <nav className="flex-1 px-4 py-8 space-y-1.5 overflow-y-auto custom-scrollbar">
               {[
                 { id: 'performance', label: 'Dashboard', icon: 'grid_view' },
                 { id: 'goods_analysis', label: 'Flow', icon: 'auto_graph' },
                 { id: 'current_inventory', label: 'Stock', icon: 'warehouse' },
-                { id: 'warehouse_status', label: 'Assets', icon: 'inventory_2' },
                 { id: 'vessel_matrix', label: 'Maritime', icon: 'sailing' },
                 { id: 'demurrage_control', label: 'Chronos', icon: 'schedule' },
                 { id: 'port_yard_status', label: 'Port & Yard', icon: 'precision_manufacturing' },
-                { id: 'exec_reporter', label: 'BYD Exec Plan', icon: 'assignment' },
-                { id: 'byd_kpis', label: 'BYD Senior KPI', icon: 'insights' },
+                { id: 'warehouse_distribution', label: 'Warehouse Dist', icon: 'domain' },
                 { id: 'backlog', label: 'Backlog', icon: 'trending_up' }
               ].map((item) => (
                 <button
@@ -631,7 +517,7 @@ export default function App() {
                     setMainView(item.id as MainView);
                     setMobileMenuOpen(false);
                   }}
-                  className={`w-full flex items-center gap-3.5 px-4 py-3.5 rounded-xl text-left text-[11px] font-black uppercase tracking-wider transition-all relative ${mainView === item.id ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30 font-extrabold scale-[1.02]' : 'text-slate-400 hover:text-white hover:bg-slate-800/40'}`}
+                  className={`w-full flex items-center gap-3.5 px-4 py-3.5 rounded-xl text-left text-[11px] font-black uppercase tracking-wider transition-all relative cursor-pointer ${mainView === item.id ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30 font-extrabold scale-[1.02]' : 'text-slate-400 hover:text-white hover:bg-slate-800/40'}`}
                 >
                   <span className="material-icons text-lg shrink-0">{item.icon}</span>
                   <span>{item.label}</span>
@@ -640,7 +526,6 @@ export default function App() {
             </nav>
           </div>
 
-          {/* Sidebar CTA Footer */}
           <div className="p-5 border-t border-slate-800 space-y-3 bg-slate-950/40">
             {shipments.length > 0 && (
               <div className="no-export">
@@ -657,7 +542,7 @@ export default function App() {
               whileTap={{ scale: 0.98 }}
               onClick={handleExportPPT} 
               disabled={isExporting || shipments.length === 0}
-              className={`w-full flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg ${isExporting ? 'bg-slate-800 text-slate-500' : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-955/20 disabled:opacity-50'}`}
+              className={`w-full flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg cursor-pointer ${isExporting ? 'bg-slate-800 text-slate-500' : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-955/20 disabled:opacity-50'}`}
             >
               <span className={`material-icons text-base shrink-0 ${isExporting ? 'animate-spin' : ''}`}>
                 {isExporting ? 'sync' : 'auto_graph'}
@@ -669,7 +554,6 @@ export default function App() {
 
         {/* Main Workspace Frame */}
         <div className={`flex-1 w-full transition-all flex flex-col ${isExporting ? '' : `lg:pl-[285px] ${isStoragePanelMinimized ? 'pr-[80px]' : '2xl:pr-[360px] pr-[360px]'}`}`}>
-          {/* Mobile Header */}
           <header className="lg:hidden flex items-center justify-between p-4 bg-white border-b border-slate-200 sticky top-0 z-40 no-export shrink-0">
             <div className="flex items-center gap-3">
               <div className="bg-indigo-600 w-8 h-8 rounded-lg flex items-center justify-center shrink-0">
@@ -681,13 +565,24 @@ export default function App() {
             </div>
             <button 
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-2 text-slate-600 hover:text-indigo-600 transition-colors focus:outline-none"
+              className="p-2 text-slate-600 hover:text-indigo-600 transition-colors focus:outline-none cursor-pointer"
             >
               <span className="material-icons text-2xl">menu</span>
             </button>
           </header>
 
       <main className="mx-auto max-w-[1440px] p-8 main-content w-full relative">
+        {error && shipments.length > 0 && (
+          <div className="mb-8 p-4 bg-rose-50 border border-rose-200 rounded-2xl text-rose-700 text-xs font-semibold flex items-center justify-between no-export">
+            <div className="flex items-center gap-3">
+              <span className="material-icons text-lg text-rose-500">error_outline</span>
+              <span>{error}</span>
+            </div>
+            <button onClick={() => setError(null)} className="text-rose-400 hover:text-rose-600 transition-colors cursor-pointer">
+              <span className="material-icons text-lg">close</span>
+            </button>
+          </div>
+        )}
         
         <AnimatePresence mode="wait">
           {mainView === "performance" ? (
@@ -699,9 +594,14 @@ export default function App() {
               transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
               className="space-y-12"
             >
-              {/* Initial State / Welcome */}
               {shipments.length === 0 ? (
                 <div className="bg-white/40 backdrop-blur-xl border border-dashed border-slate-300/50 rounded-[4rem] py-40 text-center shadow-inner no-export">
+                   {error && (
+                     <div className="max-w-md mx-auto mb-8 p-4 bg-rose-50 border border-rose-200 rounded-2xl text-rose-700 text-xs font-semibold flex items-center gap-3 justify-center">
+                        <span className="material-icons text-lg text-rose-500">error_outline</span>
+                        <span>{error}</span>
+                     </div>
+                   )}
                    <div className="bg-indigo-600 w-24 h-24 rounded-[2.5rem] flex items-center justify-center mx-auto mb-8 shadow-2xl shadow-indigo-200">
                       <span className="material-icons text-white text-5xl">cloud_upload</span>
                    </div>
@@ -715,31 +615,28 @@ export default function App() {
                 </div>
               ) : (
                   <div className="flex flex-col gap-10">
-                   {/* Filters */}
                    <div className="no-export">
                       <DashboardFilters 
-                         carriers={carriersList} analysts={analystsList} cargos={cargosList} containerTypes={containerTypesList} incoterms={incotermsList} romaneioStatuses={romaneioStatusesList} years={yearsList}
-                         selectedCarriers={filters.carriers} selectedAnalysts={filters.analysts} selectedCargos={filters.cargos} selectedContainerTypes={filters.containerTypes} selectedIncoterms={filters.incoterms} selectedRomaneioStatuses={filters.romaneioStatuses}
-                         selectedYear={filters.year} selectedPeriod={filters.period} selectedMonth={filters.month}
-                         onCarrierChange={(val) => setFilters(f => ({...f, carriers: val}))}
-                         onAnalystChange={(val) => setFilters(f => ({...f, analysts: val}))}
-                         onCargoChange={(val) => setFilters(f => ({...f, cargos: val}))}
-                         onContainerTypeChange={(val) => setFilters(f => ({...f, containerTypes: val}))}
-                         onIncotermChange={(val) => setFilters(f => ({...f, incoterms: val}))}
-                         onRomaneioStatusChange={(val) => setFilters(f => ({...f, romaneioStatuses: val}))}
-                         onYearChange={(val) => setFilters(f => ({...f, year: val}))}
-                         onPeriodChange={(val) => setFilters(f => ({...f, period: val}))}
-                         onMonthChange={(val) => setFilters(f => ({...f, month: val}))}
-                         onReset={resetFilters}
+                          carriers={carriersList} analysts={analystsList} cargos={cargosList} containerTypes={containerTypesList} incoterms={incotermsList} romaneioStatuses={romaneioStatusesList} years={yearsList}
+                          selectedCarriers={filters.carriers} selectedAnalysts={filters.analysts} selectedCargos={filters.cargos} selectedContainerTypes={filters.containerTypes} selectedIncoterms={filters.incoterms} selectedRomaneioStatuses={filters.romaneioStatuses}
+                          selectedYear={filters.year} selectedPeriod={filters.period} selectedMonth={filters.month}
+                          onCarrierChange={(val) => setFilters(f => ({...f, carriers: val}))}
+                          onAnalystChange={(val) => setFilters(f => ({...f, analysts: val}))}
+                          onCargoChange={(val) => setFilters(f => ({...f, cargos: val}))}
+                          onContainerTypeChange={(val) => setFilters(f => ({...f, containerTypes: val}))}
+                          onIncotermChange={(val) => setFilters(f => ({...f, incoterms: val}))}
+                          onRomaneioStatusChange={(val) => setFilters(f => ({...f, romaneioStatuses: val}))}
+                          onYearChange={(val) => setFilters(f => ({...f, year: val}))}
+                          onPeriodChange={(val) => setFilters(f => ({...f, period: val}))}
+                          onMonthChange={(val) => setFilters(f => ({...f, month: val}))}
+                          onReset={resetFilters}
                       />
                    </div>
 
-                   {/* Main Pipeline Analysis */}
                    <section id="pipeline-analysis" className="export-section">
                       <PipelineAnalysis data={charts.pipeline} onWeekClick={handlePipelineWeekClick} />
                    </section>
 
-                   {/* Main Charts & Operational Grid */}
                    <div className="space-y-8">
                        <ChartsGrid 
                          data={charts} 
@@ -759,12 +656,11 @@ export default function App() {
                        </section>
                    </div>
 
-                   {/* Table at the bottom */}
                    <section id="system-table" className="no-export scroll-mt-32">
-                     <ShipmentTable 
+                      <ShipmentTable 
                         shipments={paginatedShipments} sortConfig={sortConfig} onSort={setSortConfig} searchTerm={searchTerm} onSearch={setSearchTerm}
                         currentPage={currentPage} totalItems={sortedShipments.length} itemsPerPage={itemsPerPage} onPageChange={setCurrentPage}
-                     />
+                      />
                    </section>
                 </div>
               )}
@@ -773,12 +669,6 @@ export default function App() {
             <GoodsAnalysis data={charts} shipments={filteredShipments} />
           ) : mainView === "current_inventory" ? (
             <CurrentInventory shipments={filteredShipments} />
-        ) : mainView === "warehouse_status" ? (
-          <WarehouseStatusView 
-            shipments={shipments} 
-            statusComexList={statusComexList} 
-            generalWarehouseList={generalWarehouseList} 
-          />
         ) : mainView === "vessel_matrix" ? (
           <div className="space-y-6 flex-1 min-h-[500px] flex flex-col">
             <VesselMatrix shipments={filteredShipments} />
@@ -787,10 +677,8 @@ export default function App() {
           <DemurrageControl shipments={filteredShipments} />
         ) : mainView === "port_yard_status" ? (
           <PortYardOperationStatus shipments={filteredShipments} />
-        ) : mainView === "exec_reporter" ? (
-          <BydExecReporter shipments={filteredShipments} />
-        ) : mainView === "byd_kpis" ? (
-          <BydSeniorKpis shipments={filteredShipments} />
+        ) : mainView === "warehouse_distribution" ? (
+          <WarehouseDistribution shipments={filteredShipments} />
         ) : mainView === "backlog" ? (
           <BacklogView shipments={filteredShipments} />
         ) : null}

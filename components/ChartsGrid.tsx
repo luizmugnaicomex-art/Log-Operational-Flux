@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { ChartData, Shipment } from '../types';
 import {
@@ -61,7 +60,7 @@ const WAREHOUSE_COLOR_MAP: Record<string, string> = {
 };
 
 const getCarrierColor = (name: string, index: number) => {
-    const upperName = name.toUpperCase();
+    const upperName = (name || '').toUpperCase();
     if (CARRIER_COLOR_MAP[upperName]) return CARRIER_COLOR_MAP[upperName];
     if (upperName.includes('INTERMAR')) return '#16A34A';
     if (upperName.includes('TRANSPARAN')) return '#2563EB';
@@ -69,7 +68,7 @@ const getCarrierColor = (name: string, index: number) => {
 };
 
 const getWarehouseColor = (name: string, index: number) => {
-    const upperName = name.toUpperCase();
+    const upperName = (name || '').toUpperCase();
     if (WAREHOUSE_COLOR_MAP[upperName]) return WAREHOUSE_COLOR_MAP[upperName];
     if (upperName.includes('INTERMAR')) return '#16A34A';
     if (upperName.includes('TECON')) return '#DC2626';
@@ -80,13 +79,13 @@ const getWarehouseColor = (name: string, index: number) => {
 };
 
 const getGeneralWarehouseColor = (name: string, index: number) => {
-    const upperName = name.toUpperCase();
-    if (upperName.includes('INTERM') || upperName.includes('MOP')) return '#7C3AED'; // violet
-    if (upperName.includes('BODY') || upperName.includes('C01')) return '#2563EB'; // blue
-    if (upperName.includes('PAINT') || upperName.includes('C02')) return '#F59E0B'; // amber/orange
-    if (upperName.includes('ASSEMBLY') || upperName.includes('C03')) return '#16A34A'; // green
-    if (upperName.includes('BATTERY') || upperName.includes('C04')) return '#EC4899'; // pink
-    if (upperName.includes('N/A')) return '#94A3B8'; // gray
+    const upperName = (name || '').toUpperCase();
+    if (upperName.includes('INTERM') || upperName.includes('MOP')) return '#7C3AED';
+    if (upperName.includes('BODY') || upperName.includes('C01')) return '#2563EB';
+    if (upperName.includes('PAINT') || upperName.includes('C02')) return '#F59E0B';
+    if (upperName.includes('ASSEMBLY') || upperName.includes('C03')) return '#16A34A';
+    if (upperName.includes('BATTERY') || upperName.includes('C04')) return '#EC4899';
+    if (upperName.includes('N/A')) return '#94A3B8';
     return chartColors[(index + 4) % chartColors.length];
 };
 
@@ -98,10 +97,10 @@ const CustomTooltip = ({ active, payload, label }: any) => {
             <div className="glass-dark p-5 border-none rounded-3xl shadow-2xl backdrop-blur-xl text-xs min-w-[240px] z-[100] ring-1 ring-white/20">
                 <p className="label font-black text-white mb-3 border-b border-white/10 pb-2 tracking-tight text-sm">{`${label}`}</p>
                 {payload.map((p: any, i: number) => {
-                    const isWarehouseChart = p.payload.capacity !== undefined;
-                    const isGoalChart = p.payload.isWeekend !== undefined;
-                    const isCarrierChart = p.payload.latePct !== undefined;
-                    const isFlowChart = p.payload.placed !== undefined;
+                    const isWarehouseChart = p.payload?.capacity !== undefined;
+                    const isGoalChart = p.payload?.isWeekend !== undefined;
+                    const isCarrierChart = p.payload?.latePct !== undefined;
+                    const isFlowChart = p.payload?.placed !== undefined;
                     const utilization = isWarehouseChart && p.payload.capacity > 0 
                         ? ((p.payload.value / p.payload.capacity) * 100).toFixed(1) 
                         : null;
@@ -122,14 +121,14 @@ const CustomTooltip = ({ active, payload, label }: any) => {
                                    {p.payload.volume} Units | {p.payload.latePct}% Delay | {p.payload.volumePct}% Impact
                                 </div>
                             )}
-                            {isWarehouseChart && p.name.includes('Containers') && p.payload.capacity > 0 && (
+                            {isWarehouseChart && p.name?.includes('Containers') && p.payload.capacity > 0 && (
                                 <p className="text-[10px] text-white/50 font-medium mt-1.5 italic">
                                     Total Capacity: {p.payload.capacity} | Utilized: {utilization}%
                                 </p>
                             )}
                             {isFlowChart && (
                                 <div className="mt-1.5 text-[9px] font-black uppercase tracking-[0.2em] text-white/40">
-                                    {((p.payload.picked / p.payload.placed) * 100).toFixed(1)}% Operational Conversion
+                                    {((p.payload.picked / Math.max(1, p.payload.placed)) * 100).toFixed(1)}% Operational Conversion
                                 </div>
                             )}
                         </div>
@@ -207,6 +206,7 @@ const ChartContainer: React.FC<{
 };
 
 const getISOWeek = (date: Date) => {
+    if (!(date instanceof Date) || isNaN(date.getTime())) return { week: 1, year: 2026 };
     const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
     const dayNum = d.getUTCDay() || 7;
     d.setUTCDate(d.getUTCDate() + 4 - dayNum);
@@ -234,12 +234,13 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
     const [inventoryOnly, setInventoryOnly] = useState<boolean>(false);
 
     const averageDailyVolume = useMemo(() => {
-        if (!data.leadTimeTrend || data.leadTimeTrend.length === 0) return 0;
+        if (!data?.leadTimeTrend || data.leadTimeTrend.length === 0) return 0;
         const totalVolume = data.leadTimeTrend.reduce((sum, item) => sum + (item.containerCount || 0), 0);
         return Math.round((totalVolume / data.leadTimeTrend.length) * 10) / 10;
-    }, [data.leadTimeTrend]);
+    }, [data?.leadTimeTrend]);
 
     const cargoReadyData = useMemo(() => {
+        if (!data?.cargoReadyComparison || !Array.isArray(data.cargoReadyComparison)) return [];
         if (cargoReadyViewMode === 'days') return data.cargoReadyComparison;
 
         const weeklyMap = new Map<string, any>();
@@ -247,6 +248,7 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
         data.cargoReadyComparison.forEach(day => {
             if (!day.date) return;
             const d = new Date(day.date);
+            if (isNaN(d.getTime())) return;
             const { week, year } = getISOWeek(d);
             const weekKey = `W${week} - ${year}`;
             
@@ -271,10 +273,10 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                 weekData.date = d;
             }
             
-            weekData.readyCount += day.readyCount;
-            weekData.deliveredCount += day.deliveredCount;
-            weekData.ataCount += day.ataCount;
-            weekData.runningBalance = day.runningBalance; 
+            weekData.readyCount += day.readyCount || 0;
+            weekData.deliveredCount += day.deliveredCount || 0;
+            weekData.ataCount += day.ataCount || 0;
+            weekData.runningBalance = day.runningBalance || 0; 
             weekData.readyCountBL += day.readyCountBL || 0;
             weekData.deliveredCountBL += day.deliveredCountBL || 0;
             weekData.ataCountBL += day.ataCountBL || 0;
@@ -282,24 +284,24 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
         });
 
         return Array.from(weeklyMap.values()).sort((a, b) => a.date.getTime() - b.date.getTime());
-    }, [data.cargoReadyComparison, cargoReadyViewMode]);
+    }, [data?.cargoReadyComparison, cargoReadyViewMode]);
 
+    // HARDENED: Prevents infinite while-loop crashes when scenario is 0 or empty
     const rampUpDataWithScenarios = useMemo(() => {
-        const INITIAL_BACKLOG = 2400; // <-- adjust to real yard inventory
-
+        if (!data?.rampUpPlan || !Array.isArray(data.rampUpPlan) || data.rampUpPlan.length === 0) return [];
+        
+        const INITIAL_BACKLOG = 2400;
         let backlog = INITIAL_BACKLOG;
         let cumulativeDelivered = 0;
 
-        const s = Number(scenario) || 0;
+        const s = Math.max(0, Number(scenario) || 0);
 
         const result = data.rampUpPlan.map((period) => {
-            const arrivals = period.actualArrivals + period.projectedArrivals;
+            const arrivals = (period.actualArrivals || 0) + (period.projectedArrivals || 0);
+            const capacity = s * 5;
+            const delivered = capacity > 0 ? Math.min(capacity, backlog + arrivals) : 0;
 
-            const capacity = s * 5; // Using working days only
-
-            const delivered = Math.min(capacity, backlog + arrivals);
-
-            backlog = backlog + arrivals - delivered;
+            backlog = Math.max(0, backlog + arrivals - delivered);
             cumulativeDelivered += delivered;
 
             return {
@@ -310,8 +312,8 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
             };
         });
 
-        // Extend periods if there is still a backlog
-        if (backlog > 0 && result.length > 0) {
+        // Extend periods safely ONLY if scenario capacity > 0
+        if (s > 0 && backlog > 0 && result.length > 0) {
             const lastItem = result[result.length - 1];
             const lastPeriod = lastItem ? lastItem.period : "W1 - 2026";
             const parts = lastPeriod.split(' - ');
@@ -322,7 +324,7 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
             let cumulativeArrivals = lastItem ? lastItem.cumulativeArrivals : 0;
 
             let safetyCounter = 0;
-            while (backlog > 0 && safetyCounter < 52) {
+            while (backlog > 0 && safetyCounter < 12) { // Guarded at max 12 weeks
                 week++;
                 if (week > 52) {
                     week = 1;
@@ -331,11 +333,10 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                 
                 const arrivals = 0;
                 const capacity = s * 5;
-                
                 const delivered = Math.min(capacity, backlog + arrivals);
                 
                 cumulativeDelivered += delivered;
-                backlog = backlog + arrivals - delivered;
+                backlog = Math.max(0, backlog + arrivals - delivered);
                 
                 result.push({
                     period: `W${week} - ${year}`,
@@ -351,41 +352,49 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
         }
 
         return result;
-    }, [data.rampUpPlan, scenario]);
+    }, [data?.rampUpPlan, scenario]);
 
-    const getSum = (dataset: { value: number }[]) => dataset.reduce((acc, curr) => acc + curr.value, 0);
+    const getSum = (dataset: { value: number }[]) => Array.isArray(dataset) ? dataset.reduce((acc, curr) => acc + (curr?.value || 0), 0) : 0;
 
     const carrierNames = useMemo(() => {
+        if (!data?.carrierDelayImpact || !Array.isArray(data.carrierDelayImpact)) return [];
         const names = new Set<string>();
-        data.carrierDelayImpact.forEach(c => names.add(c.name));
+        data.carrierDelayImpact.forEach(c => c?.name && names.add(c.name));
         return Array.from(names);
-    }, [data.carrierDelayImpact]);
+    }, [data?.carrierDelayImpact]);
 
     const depotNames = useMemo(() => {
+        if (!data?.dailyDepotReturnBreakdown || !Array.isArray(data.dailyDepotReturnBreakdown)) return [];
         const names = new Set<string>();
         data.dailyDepotReturnBreakdown.forEach(day => {
-            Object.keys(day).forEach(key => {
-                if (key !== 'date' && key !== 'label' && key !== 'total') {
-                    names.add(key);
-                }
-            });
+            if (day) {
+                Object.keys(day).forEach(key => {
+                    if (key !== 'date' && key !== 'label' && key !== 'total') {
+                        names.add(key);
+                    }
+                });
+            }
         });
         return Array.from(names);
-    }, [data.dailyDepotReturnBreakdown]);
+    }, [data?.dailyDepotReturnBreakdown]);
 
     const warehouseNames = useMemo(() => {
+        if (!data?.dailyWarehousePickedBreakdown || !Array.isArray(data.dailyWarehousePickedBreakdown)) return [];
         const names = new Set<string>();
         data.dailyWarehousePickedBreakdown.forEach(day => {
-            Object.keys(day).forEach(key => {
-                if (key !== 'date' && key !== 'label' && key !== 'total') {
-                    names.add(key);
-                }
-            });
+            if (day) {
+                Object.keys(day).forEach(key => {
+                    if (key !== 'date' && key !== 'label' && key !== 'total') {
+                        names.add(key);
+                    }
+                });
+            }
         });
         return Array.from(names);
-    }, [data.dailyWarehousePickedBreakdown]);
+    }, [data?.dailyWarehousePickedBreakdown]);
 
     const warehouseStats = useMemo(() => {
+        if (!data?.dailyWarehousePickedBreakdown || !Array.isArray(data.dailyWarehousePickedBreakdown)) return [];
         const sums: Record<string, number> = {};
         const activeDays: Record<string, number> = {};
         const totalDays = data.dailyWarehousePickedBreakdown.length || 1;
@@ -396,12 +405,14 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
         });
 
         data.dailyWarehousePickedBreakdown.forEach(day => {
-            warehouseNames.forEach(name => {
-                if (day[name]) {
-                    sums[name] += day[name];
-                    activeDays[name] += 1;
-                }
-            });
+            if (day) {
+                warehouseNames.forEach(name => {
+                    if (day[name]) {
+                        sums[name] += day[name];
+                        activeDays[name] += 1;
+                    }
+                });
+            }
         });
 
         return warehouseNames.map(name => {
@@ -421,7 +432,7 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                 inconsistent
             };
         }).sort((a, b) => b.activeAvg - a.activeAvg);
-    }, [data.dailyWarehousePickedBreakdown, warehouseNames]);
+    }, [data?.dailyWarehousePickedBreakdown, warehouseNames]);
 
     const renderWarehouseStats = () => (
         <div className="flex flex-wrap gap-2 justify-end">
@@ -444,18 +455,22 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
     );
 
     const generalWarehouseNames = useMemo(() => {
+        if (!data?.dailyGeneralWarehousePickedBreakdown || !Array.isArray(data.dailyGeneralWarehousePickedBreakdown)) return [];
         const names = new Set<string>();
         data.dailyGeneralWarehousePickedBreakdown.forEach(day => {
-            Object.keys(day).forEach(key => {
-                if (key !== 'date' && key !== 'label' && key !== 'total') {
-                    names.add(key);
-                }
-            });
+            if (day) {
+                Object.keys(day).forEach(key => {
+                    if (key !== 'date' && key !== 'label' && key !== 'total') {
+                        names.add(key);
+                    }
+                });
+            }
         });
         return Array.from(names);
-    }, [data.dailyGeneralWarehousePickedBreakdown]);
+    }, [data?.dailyGeneralWarehousePickedBreakdown]);
 
     const generalWarehouseStats = useMemo(() => {
+        if (!data?.dailyGeneralWarehousePickedBreakdown || !Array.isArray(data.dailyGeneralWarehousePickedBreakdown)) return [];
         const sums: Record<string, number> = {};
         const activeDays: Record<string, number> = {};
         const totalDays = data.dailyGeneralWarehousePickedBreakdown.length || 1;
@@ -466,12 +481,14 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
         });
 
         data.dailyGeneralWarehousePickedBreakdown.forEach(day => {
-            generalWarehouseNames.forEach(name => {
-                if (day[name]) {
-                    sums[name] += day[name];
-                    activeDays[name] += 1;
-                }
-            });
+            if (day) {
+                generalWarehouseNames.forEach(name => {
+                    if (day[name]) {
+                        sums[name] += day[name];
+                        activeDays[name] += 1;
+                    }
+                });
+            }
         });
 
         return generalWarehouseNames.map(name => {
@@ -491,7 +508,7 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                 inconsistent
             };
         }).sort((a, b) => b.activeAvg - a.activeAvg);
-    }, [data.dailyGeneralWarehousePickedBreakdown, generalWarehouseNames]);
+    }, [data?.dailyGeneralWarehousePickedBreakdown, generalWarehouseNames]);
 
     const renderGeneralWarehouseStats = () => (
         <div className="flex flex-wrap gap-2 justify-end">
@@ -514,6 +531,7 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
     );
 
     const depotStats = useMemo(() => {
+        if (!data?.dailyDepotReturnBreakdown || !Array.isArray(data.dailyDepotReturnBreakdown)) return [];
         const sums: Record<string, number> = {};
         const activeDays: Record<string, number> = {};
         const totalDays = data.dailyDepotReturnBreakdown.length || 1;
@@ -524,12 +542,14 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
         });
 
         data.dailyDepotReturnBreakdown.forEach(day => {
-            depotNames.forEach(name => {
-                if (day[name]) {
-                    sums[name] += day[name];
-                    activeDays[name] += 1;
-                }
-            });
+            if (day) {
+                depotNames.forEach(name => {
+                    if (day[name]) {
+                        sums[name] += day[name];
+                        activeDays[name] += 1;
+                    }
+                });
+            }
         });
 
         return depotNames.map(name => {
@@ -549,11 +569,11 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                 inconsistent
             };
         }).sort((a, b) => b.activeAvg - a.activeAvg);
-    }, [data.dailyDepotReturnBreakdown, depotNames]);
+    }, [data?.dailyDepotReturnBreakdown, depotNames]);
 
     const renderDepotStats = () => (
         <div className="flex flex-wrap gap-2 justify-end">
-            {depotStats.map((depot, index) => {
+            {depotStats.map((depot) => {
                 const color = chartColors[depotNames.indexOf(depot.name) % chartColors.length];
                 return (
                     <div 
@@ -579,7 +599,7 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
             case 'daily_volume':
                 return (
                     <ComposedChart
-                        data={data.leadTimeTrend}
+                        data={data?.leadTimeTrend || []}
                         margin={{ top: 20, right: 20, left: 10, bottom: 5 }}
                         onClick={(e: any) => {
                             if (onLeadTimeClick && e?.activePayload?.length) {
@@ -600,7 +620,7 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                         </ReferenceLine>
                         <Bar dataKey="containerCount" name="Arrivals (Delivered)" cursor="pointer" radius={[6, 6, 0, 0]}>
                             <LabelList dataKey="containerCount" position="top" fontSize={labelSize} fill="#1e293b" fontWeight={900} />
-                            {data.leadTimeTrend.map((entry, index) => {
+                            {(data?.leadTimeTrend || []).map((entry, index) => {
                                 let fill = '#94a3b8';
                                 if (entry.isWeekend) fill = '#6366F1';
                                 else if (entry.goalReached) fill = '#10B981';
@@ -611,7 +631,7 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                 );
             case 'daily_depot_return':
                 return (
-                    <BarChart data={data.dailyDepotReturnBreakdown} margin={{ top: 20, right: 20, left: 10, bottom: 5 }}>
+                    <BarChart data={data?.dailyDepotReturnBreakdown || []} margin={{ top: 20, right: 20, left: 10, bottom: 5 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
                         <XAxis dataKey="label" tick={{ fontSize: tickSize, fontWeight: 700, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
                         <YAxis tick={{ fontSize: labelSize, fontWeight: 700, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
@@ -633,7 +653,7 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                 );
             case 'daily_warehouse_picked':
                 return (
-                    <BarChart data={data.dailyWarehousePickedBreakdown} margin={{ top: 20, right: 20, left: 10, bottom: 5 }}>
+                    <BarChart data={data?.dailyWarehousePickedBreakdown || []} margin={{ top: 20, right: 20, left: 10, bottom: 5 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
                         <XAxis dataKey="label" tick={{ fontSize: tickSize, fontWeight: 700, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
                         <YAxis tick={{ fontSize: labelSize, fontWeight: 700, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
@@ -655,7 +675,7 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                 );
             case 'daily_general_warehouse_picked':
                 return (
-                    <BarChart data={data.dailyGeneralWarehousePickedBreakdown} margin={{ top: 20, right: 20, left: 10, bottom: 5 }}>
+                    <BarChart data={data?.dailyGeneralWarehousePickedBreakdown || []} margin={{ top: 20, right: 20, left: 10, bottom: 5 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
                         <XAxis dataKey="label" tick={{ fontSize: tickSize, fontWeight: 700, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
                         <YAxis tick={{ fontSize: labelSize, fontWeight: 700, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
@@ -677,7 +697,7 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                 );
             case 'depot_distribution':
                 return (
-                    <BarChart data={data.depotDistribution} layout="vertical" margin={{ top: 20, right: 60, left: 30, bottom: 5 }}>
+                    <BarChart data={data?.depotDistribution || []} layout="vertical" margin={{ top: 20, right: 60, left: 30, bottom: 5 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
                         <XAxis type="number" hide />
                         <YAxis 
@@ -690,7 +710,7 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                         <Tooltip content={<CustomTooltip />} />
                         <Bar dataKey="value" name="Returned Containers" radius={[0, 6, 6, 0]}>
                             <LabelList dataKey="value" position="right" fontSize={labelSize} fill="#1e293b" fontWeight={900} />
-                            {data.depotDistribution.map((entry, index) => (
+                            {(data?.depotDistribution || []).map((entry, index) => (
                                 <Cell key={`depot-cell-${index}`} fill={chartColors[index % chartColors.length]} />
                             ))}
                         </Bar>
@@ -698,7 +718,7 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                 );
             case 'goal_achievement':
                 return (
-                    <BarChart data={data.leadTimeTrend} margin={{ top: 20, right: 30, left: 10, bottom: 5 }}>
+                    <BarChart data={data?.leadTimeTrend || []} margin={{ top: 20, right: 30, left: 10, bottom: 5 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
                         <XAxis dataKey="label" tick={{ fontSize: labelSize, fontWeight: 700, fill: '#94a3b8' }} axisLine={false} />
                         <YAxis tick={{ fontSize: labelSize, fontWeight: 700, fill: '#94a3b8' }} axisLine={false} unit="%" />
@@ -711,7 +731,7 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                         </ReferenceLine>
                         <Bar dataKey="achievementPct" name="Goal Achievement" radius={[6, 6, 0, 0]}>
                             <LabelList dataKey="achievementPct" position="top" fontSize={labelSize} fill="#1e293b" fontWeight={900} formatter={(v: number) => v > 0 ? `${v}%` : ''} />
-                            {data.leadTimeTrend.map((entry, index) => {
+                            {(data?.leadTimeTrend || []).map((entry, index) => {
                                 if (entry.isWeekend) return <Cell key={`cell-pct-${index}`} fill="#9333EA" />;
                                 let fill = '#DC2626';
                                 if (entry.achievementPct >= 100) fill = '#10B981';
@@ -723,7 +743,7 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                 );
             case 'carrier_breakdown':
                 return (
-                    <BarChart data={data.dailyCarrierBreakdown} margin={{ top: 20, right: 20, left: 10, bottom: 5 }}>
+                    <BarChart data={data?.dailyCarrierBreakdown || []} margin={{ top: 20, right: 20, left: 10, bottom: 5 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
                         <XAxis dataKey="label" tick={{ fontSize: tickSize, fontWeight: 700, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
                         <YAxis tick={{ fontSize: labelSize, fontWeight: 700, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
@@ -751,7 +771,7 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                 );
             case 'volume_share':
                 return (
-                    <BarChart data={data.carrierDelayImpact} margin={{ top: 20, right: 20, left: 10, bottom: 5 }}>
+                    <BarChart data={data?.carrierDelayImpact || []} margin={{ top: 20, right: 20, left: 10, bottom: 5 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
                         <XAxis dataKey="name" tick={{ fontSize: tickSize, fontWeight: 700, fill: '#64748b' }} axisLine={false} interval={0} />
                         <YAxis tick={{ fontSize: labelSize, fontWeight: 700, fill: '#94a3b8' }} axisLine={false} unit="%" />
@@ -763,7 +783,7 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                                 position="top" 
                                 content={(props: any) => {
                                     const { x, y, width, value, index } = props;
-                                    const entry = data.carrierDelayImpact[index];
+                                    const entry = data?.carrierDelayImpact?.[index];
                                     if (!entry) return null;
                                     return (
                                         <text 
@@ -779,7 +799,7 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                                     );
                                 }}
                             />
-                            {data.carrierDelayImpact.map((entry, index) => (
+                            {(data?.carrierDelayImpact || []).map((entry, index) => (
                                 <Cell key={`carrier-cell-${index}`} fill={getCarrierColor(entry.name, index)} />
                             ))}
                         </Bar>
@@ -787,7 +807,7 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                 );
             case 'delay_distribution':
                 return (
-                    <BarChart data={data.dailyCarrierDelayBreakdown} margin={{ top: 20, right: 20, left: 10, bottom: 5 }}>
+                    <BarChart data={data?.dailyCarrierDelayBreakdown || []} margin={{ top: 20, right: 20, left: 10, bottom: 5 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
                         <XAxis dataKey="label" tick={{ fontSize: tickSize, fontWeight: 700, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
                         <YAxis tick={{ fontSize: labelSize, fontWeight: 700, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
@@ -809,7 +829,7 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                 );
             case 'monthly_trend':
                 return (
-                    <ComposedChart data={data.monthlyTrend} margin={{ top: 20, right: 20, left: 10, bottom: 5 }}>
+                    <ComposedChart data={data?.monthlyTrend || []} margin={{ top: 20, right: 20, left: 10, bottom: 5 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
                         <XAxis dataKey="name" tick={{ fontSize: labelSize, fontWeight: 700, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
                         <YAxis yAxisId="left" tick={{ fontSize: labelSize, fontWeight: 700, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
@@ -822,7 +842,7 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                 );
             case 'terminal_capacity':
                 return (
-                    <ComposedChart data={data.warehouseVolume} margin={{ top: 35, right: 30, left: 20, bottom: 5 }}>
+                    <ComposedChart data={data?.warehouseVolume || []} margin={{ top: 35, right: 30, left: 20, bottom: 5 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
                         <XAxis dataKey="name" tick={{ fontSize: labelSize, fontWeight: 700, fill: '#94a3b8' }} axisLine={false} />
                         <YAxis tick={{ fontSize: labelSize, fontWeight: 700, fill: '#94a3b8' }} axisLine={false} />
@@ -840,7 +860,7 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                 );
             case 'bonded_flow':
                 return (
-                    <BarChart data={data.bondedFlow} margin={{ top: 35, right: 30, left: 20, bottom: 5 }}>
+                    <BarChart data={data?.bondedFlow || []} margin={{ top: 35, right: 30, left: 20, bottom: 5 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
                         <XAxis dataKey="name" tick={{ fontSize: labelSize, fontWeight: 700, fill: '#94a3b8' }} axisLine={false} />
                         <YAxis tick={{ fontSize: labelSize, fontWeight: 700, fill: '#94a3b8' }} axisLine={false} />
@@ -859,7 +879,7 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                 );
             case 'bonded_inventory':
                 return (
-                    <BarChart data={data.bondedInventory} margin={{ top: 35, right: 30, left: 20, bottom: 5 }}>
+                    <BarChart data={data?.bondedInventory || []} margin={{ top: 35, right: 30, left: 20, bottom: 5 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
                         <XAxis dataKey="name" tick={{ fontSize: labelSize, fontWeight: 700, fill: '#94a3b8' }} axisLine={false} />
                         <YAxis tick={{ fontSize: labelSize, fontWeight: 700, fill: '#94a3b8' }} axisLine={false} />
@@ -871,7 +891,7 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                             fill="#ef4444" 
                             stackId="a"
                             barSize={isMaximized ? 40 : 25} 
-                            onClick={(data: any) => onBondedInventoryClick && onBondedInventoryClick(data, 'arrivedNotPicked')}
+                            onClick={(d: any) => onBondedInventoryClick && onBondedInventoryClick(d, 'arrivedNotPicked')}
                             style={{ cursor: 'pointer' }}
                         />
                         <Bar 
@@ -881,7 +901,7 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                             stackId="a"
                             barSize={isMaximized ? 40 : 25} 
                             radius={[8,8,0,0]}
-                            onClick={(data: any) => onBondedInventoryClick && onBondedInventoryClick(data, 'futureArrivals')}
+                            onClick={(d: any) => onBondedInventoryClick && onBondedInventoryClick(d, 'futureArrivals')}
                             style={{ cursor: 'pointer' }}
                         >
                             <LabelList dataKey="total" position="top" fontSize={labelSize} fill="#ef4444" fontWeight={900} />
@@ -890,14 +910,14 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                 );
             case 'carrier_leadtime':
                 return (
-                    <BarChart data={data.carrierPerformance} margin={{ top: 25, right: 30, left: 20, bottom: 5 }}>
+                    <BarChart data={data?.carrierPerformance || []} margin={{ top: 25, right: 30, left: 20, bottom: 5 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
                         <XAxis dataKey="name" tick={{ fontSize: labelSize, fontWeight: 700, fill: '#94a3b8' }} axisLine={false} />
                         <YAxis tick={{ fontSize: labelSize, fontWeight: 700, fill: '#94a3b8' }} axisLine={false} />
                         <Tooltip content={<CustomTooltip />} />
                         <Bar dataKey="avgTime" name="Avg Days" radius={[8,8,0,0]}>
                             <LabelList dataKey="avgTime" position="top" fontSize={labelSize} fill="#1e293b" fontWeight={900} formatter={(val: number) => Number(val).toFixed(1)} />
-                            {data.carrierPerformance.map((entry, index) => (
+                            {(data?.carrierPerformance || []).map((entry, index) => (
                                 <Cell key={`cell-${index}`} fill={index === 0 ? '#94a3b8' : '#DC2626'} />
                             ))}
                         </Bar>
@@ -905,14 +925,14 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                 );
             case 'romaneio_distribution':
                 return (
-                    <BarChart data={data.romaneioDistribution} margin={{ top: 25, right: 30, left: 20, bottom: 5 }}>
+                    <BarChart data={data?.romaneioDistribution || []} margin={{ top: 25, right: 30, left: 20, bottom: 5 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
                         <XAxis dataKey="name" tick={{ fontSize: labelSize, fontWeight: 700, fill: '#94a3b8' }} axisLine={false} />
                         <YAxis tick={{ fontSize: labelSize, fontWeight: 700, fill: '#94a3b8' }} axisLine={false} />
                         <Tooltip content={<CustomTooltip />} />
                         <Bar dataKey="value" name="Containers" radius={[8,8,0,0]}>
                             <LabelList dataKey="value" position="top" fontSize={labelSize} fill="#1e293b" fontWeight={900} />
-                            {data.romaneioDistribution.map((entry, index) => (
+                            {(data?.romaneioDistribution || []).map((entry, index) => (
                                 <Cell key={`cell-${index}`} fill={entry.name === 'YES' || entry.name === 'LCL' ? '#16A34A' : '#F59E0B'} />
                             ))}
                         </Bar>
@@ -924,11 +944,9 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                         data={cargoReadyData} 
                         margin={{ top: 20, right: 20, left: 10, bottom: 30 }}
                         onClick={(state) => {
-                             if (state && state.activePayload && state.activePayload.length > 0) {
-                                  // Call inventory click since it handles the time frame drilldown correctly
-                                  // This allows users to click anywhere on the background stripe for that week/day
-                                  if (onInventoryClick) onInventoryClick(state.activePayload[0].payload);
-                             }
+                            if (state && state.activePayload && state.activePayload.length > 0) {
+                                if (onInventoryClick) onInventoryClick(state.activePayload[0].payload);
+                            }
                         }}
                         style={{ cursor: 'pointer' }}
                     >
@@ -949,8 +967,10 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                                 let displayLabel = payload.value;
                                 if (cargoReadyViewMode === 'days' && entry?.date) {
                                     const d = new Date(entry.date);
-                                    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-                                    displayLabel = `${days[d.getDay()]} ${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}`;
+                                    if (!isNaN(d.getTime())) {
+                                        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                                        displayLabel = `${days[d.getDay()]} ${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}`;
+                                    }
                                 }
 
                                 return (
@@ -977,7 +997,6 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                         <Tooltip content={<CustomTooltip />} />
                         <Legend wrapperStyle={{ fontSize: labelSize, fontWeight: 800, textTransform: 'uppercase', paddingTop: '30px' }} />
                         
-                        {/* Vessel Arrivals (ATA) */}
                         {!inventoryOnly && (
                             <Bar 
                                 dataKey={inventoryUnit === 'bls' ? 'ataCountBL' : 'ataCount'} 
@@ -985,14 +1004,13 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                                 fill="#EF4444" 
                                 radius={[6, 6, 0, 0]}
                                 opacity={0.6}
-                                onClick={(data) => onVesselArrivalClick?.(data)}
+                                onClick={(d) => onVesselArrivalClick?.(d)}
                                 style={{ cursor: onVesselArrivalClick ? 'pointer' : 'default' }}
                             >
                                 <LabelList dataKey={inventoryUnit === 'bls' ? 'ataCountBL' : 'ataCount'} position="top" fontSize={labelSize} fill="#1e293b" fontWeight={900} />
                             </Bar>
                         )}
 
-                        {/* Supply Inflow */}
                         {!inventoryOnly && (
                             <Bar 
                                 dataKey={inventoryUnit === 'bls' ? 'readyCountBL' : 'readyCount'} 
@@ -1000,14 +1018,13 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                                 fill="#F59E0B" 
                                 radius={[6, 6, 0, 0]}
                                 opacity={0.6}
-                                onClick={(data) => onCargoReadyInflowClick?.(data)}
+                                onClick={(d) => onCargoReadyInflowClick?.(d)}
                                 style={{ cursor: onCargoReadyInflowClick ? 'pointer' : 'default' }}
                             >
                                 <LabelList dataKey={inventoryUnit === 'bls' ? 'readyCountBL' : 'readyCount'} position="top" fontSize={labelSize} fill="#1e293b" fontWeight={900} />
                             </Bar>
                         )}
 
-                        {/* Remaining Balance Area */}
                         <Line
                             type="stepAfter"
                             dataKey={inventoryUnit === 'bls' ? 'runningBalanceBL' : 'runningBalance'}
@@ -1017,14 +1034,13 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                             strokeDasharray={inventoryOnly ? "" : "5 5"}
                             dot={{ r: inventoryOnly ? 6 : 4, fill: '#7C3AED', stroke: '#fff', strokeWidth: 2 }}
                             activeDot={{ r: 9, stroke: '#C4B5FD', strokeWidth: 4, cursor: 'pointer', onClick: (e, payload: any) => onInventoryClick?.(payload.payload) }}
-                            onClick={(data) => {
-                                 if (data && data.payload) { onInventoryClick?.(data.payload) }
-                                 else { onInventoryClick?.(data) }
+                            onClick={(d) => {
+                                 if (d && d.payload) { onInventoryClick?.(d.payload); }
+                                 else { onInventoryClick?.(d); }
                             }}
                             style={{ cursor: onInventoryClick ? 'pointer' : 'default', filter: inventoryOnly ? 'drop-shadow(0px 4px 6px rgba(124, 58, 237, 0.4))' : 'none' }}
                         />
                         
-                        {/* Drain Line */}
                         <Line 
                             type="monotone" 
                             dataKey={inventoryUnit === 'bls' ? 'deliveredCountBL' : 'deliveredCount'} 
@@ -1034,7 +1050,7 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                             opacity={inventoryOnly ? 0.4 : 1}
                             dot={{ r: 5, fill: '#16A34A', stroke: '#fff', strokeWidth: 2 }} 
                             activeDot={{ r: 8 }}
-                            onClick={(data) => onDrainLineClick?.(data)}
+                            onClick={(d) => onDrainLineClick?.(d)}
                             style={{ cursor: onDrainLineClick ? 'pointer' : 'default' }}
                         />
                     </ComposedChart>
@@ -1072,9 +1088,9 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                             label={{ position: 'insideTopLeft', value: 'Terminal Capacity', fill: '#DC2626', fontSize: 12, fontWeight: 'bold' }} 
                         />
 
-                        <Bar dataKey="actualArrivals" name="Actual Arrivals (ATA)" stackId="a" fill="#1E293B" radius={[0, 0, 0, 0]} onClick={(data) => onRampUpClick?.(data)} style={{ cursor: onRampUpClick ? 'pointer' : 'default' }} />
+                        <Bar dataKey="actualArrivals" name="Actual Arrivals (ATA)" stackId="a" fill="#1E293B" radius={[0, 0, 0, 0]} onClick={(d) => onRampUpClick?.(d)} style={{ cursor: onRampUpClick ? 'pointer' : 'default' }} />
                         
-                        <Bar dataKey="projectedArrivals" name="Projected Arrivals (ETA)" stackId="a" fill="#94A3B8" radius={[6, 6, 0, 0]} onClick={(data) => onRampUpClick?.(data)} style={{ cursor: onRampUpClick ? 'pointer' : 'default' }} />
+                        <Bar dataKey="projectedArrivals" name="Projected Arrivals (ETA)" stackId="a" fill="#94A3B8" radius={[6, 6, 0, 0]} onClick={(d) => onRampUpClick?.(d)} style={{ cursor: onRampUpClick ? 'pointer' : 'default' }} />
 
                         {scenario !== '' && (
                             <>
@@ -1332,7 +1348,7 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                 <ChartContainer
                     title={getChartMeta('monthly_trend').title}
                     subtitle={getChartMeta('monthly_trend').subtitle}
-                    headerRight={<div className="bg-slate-900 text-white px-4 py-1.5 rounded-2xl text-[10px] font-black uppercase">DELIVERED: {getSum(data.monthlyTrend)}</div>}
+                    headerRight={<div className="bg-slate-900 text-white px-4 py-1.5 rounded-2xl text-[10px] font-black uppercase">DELIVERED: {getSum(data?.monthlyTrend || [])}</div>}
                     height={350}
                     onMaximize={() => setMaximizedChart('monthly_trend')}
                 >

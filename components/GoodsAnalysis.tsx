@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { motion } from 'motion/react';
 import { ChartData, Shipment } from '../types';
 import {
@@ -21,25 +21,33 @@ interface GoodsAnalysisProps {
     shipments: Shipment[];
 }
 
-const GoodsAnalysis: React.FC<GoodsAnalysisProps> = ({ data, shipments }) => {
-    const pqrSummary = data.pqrAnalysis.reduce((acc, item) => {
-        acc[item.classification] = (acc[item.classification] || 0) + item.value;
-        return acc;
-    }, {} as Record<string, number>);
+const GoodsAnalysis: React.FC<GoodsAnalysisProps> = ({ data, shipments = [] }) => {
+    const pqrAnalysis = useMemo(() => data?.pqrAnalysis || [], [data?.pqrAnalysis]);
 
-    const pieData = [
+    const pqrSummary = useMemo(() => {
+        return pqrAnalysis.reduce((acc, item) => {
+            if (item && item.classification) {
+                acc[item.classification] = (acc[item.classification] || 0) + (item.value || 0);
+            }
+            return acc;
+        }, {} as Record<string, number>);
+    }, [pqrAnalysis]);
+
+    const pieData = useMemo(() => [
         { name: 'P (Popular)', value: pqrSummary['P'] || 0, color: '#6366f1' },
         { name: 'Q (Quantity)', value: pqrSummary['Q'] || 0, color: '#f59e0b' },
         { name: 'R (Rare)', value: pqrSummary['R'] || 0, color: '#94a3b8' },
-    ];
+    ], [pqrSummary]);
 
-    const topModels = data.pqrAnalysis.slice(0, 10);
+    const topModels = useMemo(() => pqrAnalysis.slice(0, 10), [pqrAnalysis]);
+
+    const totalShipments = Array.isArray(shipments) ? shipments.length : 0;
 
     return (
         <motion.div 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="space-y-12 pb-20"
+            className="space-y-12 pb-20 w-full"
         >
             {/* Header Bento Section */}
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
@@ -61,7 +69,7 @@ const GoodsAnalysis: React.FC<GoodsAnalysisProps> = ({ data, shipments }) => {
                   </div>
                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-4 font-display">Unique Models</p>
                   <div className="text-6xl font-display font-black tracking-tighter">
-                     {data.pqrAnalysis.length}
+                     {pqrAnalysis.length}
                   </div>
                   <p className="text-xs font-bold text-indigo-400 mt-2 uppercase tracking-widest">Active Units</p>
                </div>
@@ -73,7 +81,7 @@ const GoodsAnalysis: React.FC<GoodsAnalysisProps> = ({ data, shipments }) => {
                     { id: 'P', label: 'Priority Popular', freq: 'High Frequency', color: 'indigo', val: pqrSummary['P'] || 0, icon: 'auto_graph' },
                     { id: 'Q', label: 'Quasi-Periodic', freq: 'Medium Cycle', color: 'amber', val: pqrSummary['Q'] || 0, icon: 'analytics' },
                     { id: 'R', label: 'Rare Operational', freq: 'Low Latency', color: 'slate', val: pqrSummary['R'] || 0, icon: 'history' }
-                ].map((cat, i) => (
+                ].map((cat) => (
                     <motion.div 
                         key={cat.id}
                         whileHover={{ y: -8 }}
@@ -100,7 +108,7 @@ const GoodsAnalysis: React.FC<GoodsAnalysisProps> = ({ data, shipments }) => {
                            <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
                               <div className={`h-full ${
                                  cat.color === 'indigo' ? 'bg-indigo-600' : cat.color === 'amber' ? 'bg-amber-500' : 'bg-slate-400'
-                              } group-hover:scale-x-110 transition-transform origin-left duration-1000`} style={{ width: `${((cat.val) / shipments.length * 100).toFixed(1)}%` }}></div>
+                              } group-hover:scale-x-110 transition-transform origin-left duration-1000`} style={{ width: totalShipments > 0 ? `${((cat.val) / totalShipments * 100).toFixed(1)}%` : '0%' }}></div>
                            </div>
                         </div>
                     </motion.div>
@@ -212,7 +220,7 @@ const GoodsAnalysis: React.FC<GoodsAnalysisProps> = ({ data, shipments }) => {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                            {data.pqrAnalysis.map((item, i) => (
+                            {pqrAnalysis.map((item, i) => (
                                 <motion.tr 
                                   key={i} 
                                   initial={{ opacity: 0 }}
@@ -256,7 +264,7 @@ const GoodsAnalysis: React.FC<GoodsAnalysisProps> = ({ data, shipments }) => {
                                     </td>
                                     <td className="px-8 py-6 text-right pr-12">
                                         <span className="text-xs font-display font-black text-slate-800 tracking-tighter">
-                                            {currencyFormatter.format(item.totalCost)}
+                                            {currencyFormatter.format(item.totalCost || 0)}
                                         </span>
                                     </td>
                                 </motion.tr>
@@ -269,4 +277,4 @@ const GoodsAnalysis: React.FC<GoodsAnalysisProps> = ({ data, shipments }) => {
     );
 };
 
-export default GoodsAnalysis;
+export default React.memo(GoodsAnalysis);

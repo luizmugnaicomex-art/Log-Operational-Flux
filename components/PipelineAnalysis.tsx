@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { PipelineWeek } from '../types';
 
@@ -7,8 +6,8 @@ interface PipelineAnalysisProps {
     onWeekClick: (week: PipelineWeek) => void;
 }
 
-const PipelineAnalysis: React.FC<PipelineAnalysisProps> = ({ data, onWeekClick }) => {
-    if (!data || data.length === 0) return null;
+const PipelineAnalysis: React.FC<PipelineAnalysisProps> = ({ data = [], onWeekClick }) => {
+    if (!Array.isArray(data) || data.length === 0) return null;
 
     const getStatusColor = (status: string) => {
         switch (status) {
@@ -58,39 +57,41 @@ const PipelineAnalysis: React.FC<PipelineAnalysisProps> = ({ data, onWeekClick }
                     </thead>
                     <tbody className="divide-y divide-white/10">
                         {data.map((week, idx) => {
-                            const isCompleted = week.deliveredCount === week.volume && week.volume > 0;
-                            const pickupPercentage = week.volume > 0 ? (week.deliveredCount / week.volume) * 100 : 0;
+                            if (!week) return null;
+                            const isCompleted = week.deliveredCount === week.volume && (week.volume || 0) > 0;
+                            const pickupPercentage = (week.volume || 0) > 0 ? ((week.deliveredCount || 0) / week.volume) * 100 : 0;
+                            const vesselsList = Array.isArray(week.vessels) ? week.vessels : [];
 
                             return (
                                 <tr 
                                     key={idx} 
                                     onClick={() => {
-                                        onWeekClick(week);
+                                        if (onWeekClick) onWeekClick(week);
                                     }}
                                     className="hover:bg-white/40 cursor-pointer transition-all group relative"
                                 >
                                     <td className="px-8 py-6">
-                                        <div className="font-black text-slate-800 text-sm tracking-tight">{week.period}</div>
+                                        <div className="font-black text-slate-800 text-sm tracking-tight">{week.period || '-'}</div>
                                         {week.dateRangeStr && (
                                             <div className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-wider">{week.dateRangeStr}</div>
                                         )}
                                     </td>
                                     <td className="px-6 py-6 text-[11px] font-bold text-slate-500 max-w-[200px] truncate group-hover:text-indigo-600 transition-colors">
-                                        {week.vessels.length > 0 ? week.vessels.join(', ') : 'N/A'}
+                                        {vesselsList.length > 0 ? vesselsList.join(', ') : 'N/A'}
                                     </td>
                                     <td className="px-6 py-6 text-center">
                                         <span className="text-sm font-black text-indigo-600 group-hover:scale-110 transition-transform inline-block px-3 py-1 bg-indigo-50 rounded-lg ring-1 ring-indigo-100">
-                                            {week.volume}
+                                            {week.volume || 0}
                                         </span>
                                     </td>
                                     <td className="px-6 py-6 min-w-[180px]">
                                         <div className="flex flex-col gap-2">
                                             <div className="flex justify-between items-center px-1">
                                                 <span className={`text-[9px] font-black uppercase tracking-widest ${isCompleted ? 'text-emerald-600' : 'text-slate-400'}`}>
-                                                    {isCompleted ? 'Finalized ✓' : `${week.deliveredCount} Units Hit`}
+                                                    {isCompleted ? 'Finalized ✓' : `${week.deliveredCount || 0} Units Hit`}
                                                 </span>
                                                 <span className="text-[9px] font-black text-slate-400 tracking-widest">
-                                                    {week.pendingCount > 0 ? `${week.pendingCount} On Wait` : ''}
+                                                    {(week.pendingCount || 0) > 0 ? `${week.pendingCount} On Wait` : ''}
                                                 </span>
                                             </div>
                                             <div className="h-1.5 w-full bg-white/50 rounded-full overflow-hidden shadow-inner ring-1 ring-black/5">
@@ -102,14 +103,14 @@ const PipelineAnalysis: React.FC<PipelineAnalysisProps> = ({ data, onWeekClick }
                                         </div>
                                     </td>
                                     <td className="px-6 py-6 text-center font-black text-slate-700 text-sm">
-                                        {week.drainDaysGate} <span className="text-[10px] text-slate-400 font-bold ml-1">D</span>
+                                        {week.drainDaysGate || 0} <span className="text-[10px] text-slate-400 font-bold ml-1">D</span>
                                     </td>
                                     <td className="px-6 py-6 text-center font-black text-slate-700 text-sm">
-                                        {week.drainDaysFactory} <span className="text-[10px] text-slate-400 font-bold ml-1">D</span>
+                                        {week.drainDaysFactory || 0} <span className="text-[10px] text-slate-400 font-bold ml-1">D</span>
                                     </td>
                                     <td className="px-8 py-6 text-right">
                                         <span className={`inline-flex px-4 py-1.5 rounded-xl text-[9px] font-black border uppercase shadow-sm ring-1 ring-white/20 ${getStatusColor(week.status)}`}>
-                                            {week.status === 'TIME COLLISION' ? `Collision (150/D)` : week.status}
+                                            {week.status === 'TIME COLLISION' ? `Collision (150/D)` : (week.status || 'SAFE')}
                                         </span>
                                     </td>
                                 </tr>

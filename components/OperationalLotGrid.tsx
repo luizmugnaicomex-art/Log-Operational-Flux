@@ -1,4 +1,3 @@
-
 import React, { useMemo, useState } from 'react';
 import { Shipment } from '../types';
 
@@ -7,20 +6,28 @@ interface OperationalLotGridProps {
     onLotClick: (model: string, dateStr: string, batchNumber: string) => void;
 }
 
-const OperationalLotGrid: React.FC<OperationalLotGridProps> = ({ shipments, onLotClick }) => {
+const isValidDate = (d: any): d is Date => d instanceof Date && !isNaN(d.getTime());
+
+const OperationalLotGrid: React.FC<OperationalLotGridProps> = ({ shipments = [], onLotClick }) => {
     const [isMaximized, setIsMaximized] = useState(false);
 
     const { dates, models, grid } = useMemo(() => {
+        if (!Array.isArray(shipments) || shipments.length === 0) {
+            return { dates: [], models: [], grid: {} };
+        }
+
         const dateSet = new Set<string>();
         const modelSet = new Set<string>();
         
         // Use last operational days
-        const deliveredOnly = shipments.filter(s => s.deliveryByd).sort((a, b) => a.deliveryByd!.getTime() - b.deliveryByd!.getTime());
+        const deliveredOnly = shipments
+            .filter(s => s && s.deliveryByd && isValidDate(s.deliveryByd))
+            .sort((a, b) => a.deliveryByd!.getTime() - b.deliveryByd!.getTime());
         
         deliveredOnly.forEach(s => {
             const dateStr = s.deliveryByd!.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' });
             dateSet.add(dateStr);
-            modelSet.add(s.cargoModel);
+            if (s.cargoModel) modelSet.add(s.cargoModel);
         });
 
         const sortedDates = Array.from(dateSet).slice(-12); // Last 12 days
@@ -36,15 +43,15 @@ const OperationalLotGrid: React.FC<OperationalLotGridProps> = ({ shipments, onLo
         });
 
         shipments.forEach(s => {
-            if (!s.deliveryByd) return;
+            if (!s || !s.deliveryByd || !isValidDate(s.deliveryByd)) return;
             const dateStr = s.deliveryByd.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' });
-            if (!sortedDates.includes(dateStr)) return;
+            if (!sortedDates.includes(dateStr) || !s.cargoModel || !gridData[s.cargoModel] || !gridData[s.cargoModel][dateStr]) return;
 
             const existingBatch = gridData[s.cargoModel][dateStr].find(b => b.batch === s.batchNumber);
             if (existingBatch) {
                 existingBatch.count++;
             } else {
-                gridData[s.cargoModel][dateStr].push({ batch: s.batchNumber, count: 1 });
+                gridData[s.cargoModel][dateStr].push({ batch: s.batchNumber || '0', count: 1 });
             }
         });
 
@@ -54,8 +61,8 @@ const OperationalLotGrid: React.FC<OperationalLotGridProps> = ({ shipments, onLo
     if (dates.length === 0) return null;
 
     const isWeekend = (dateStr: string) => {
-        const sample = shipments.find(s => s.deliveryByd?.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' }) === dateStr);
-        if (!sample || !sample.deliveryByd) return false;
+        const sample = shipments.find(s => s && s.deliveryByd && isValidDate(s.deliveryByd) && s.deliveryByd.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' }) === dateStr);
+        if (!sample || !sample.deliveryByd || !isValidDate(sample.deliveryByd)) return false;
         const day = sample.deliveryByd.getDay();
         return day === 0 || day === 6;
     };
@@ -95,7 +102,7 @@ const OperationalLotGrid: React.FC<OperationalLotGridProps> = ({ shipments, onLo
                                 {model}
                             </td>
                             {dates.map(date => {
-                                const lots = grid[model][date];
+                                const lots = grid[model]?.[date] || [];
                                 return (
                                     <td key={`${model}-${date}`} className="p-4 border-r border-white/10 align-top">
                                         <div className={`flex flex-col gap-3 ${maximized ? 'min-h-[90px]' : 'min-h-[70px]'}`}>
@@ -103,7 +110,7 @@ const OperationalLotGrid: React.FC<OperationalLotGridProps> = ({ shipments, onLo
                                                 lots.map((lot, idx) => (
                                                     <button 
                                                         key={idx} 
-                                                        onClick={() => onLotClick(model, date, lot.batch)}
+                                                        onClick={() => onLotClick && onLotClick(model, date, lot.batch)}
                                                         className="flex items-center justify-between glass-dark border-none text-slate-800 rounded-2xl px-4 py-3 shadow-glass ring-1 ring-white/50 animate-in zoom-in-95 duration-500 hover:bg-white/80 hover:scale-[1.03] active:scale-[0.97] transition-all cursor-pointer text-left w-full group/lot"
                                                     >
                                                         <span className="text-[10px] font-black tracking-widest truncate mr-3 text-slate-500">BATCH {lot.batch}</span>
@@ -156,7 +163,7 @@ const OperationalLotGrid: React.FC<OperationalLotGridProps> = ({ shipments, onLo
                         </div>
                         <button 
                             onClick={() => setIsMaximized(true)}
-                            className="text-slate-400 hover:text-indigo-600 focus:outline-none p-3 hover:bg-white/60 rounded-2xl transition-all no-export ring-1 ring-transparent hover:ring-white/50"
+                            className="text-slate-400 hover:text-indigo-600 focus:outline-none p-3 hover:bg-white/60 rounded-2xl transition-all no-export ring-1 ring-transparent hover:ring-white/50 cursor-pointer"
                             title="Maximize Intelligence Grid"
                         >
                             <span className="material-icons text-2xl">fullscreen</span>
@@ -191,7 +198,7 @@ const OperationalLotGrid: React.FC<OperationalLotGridProps> = ({ shipments, onLo
                             </div>
                             <button 
                                 onClick={() => setIsMaximized(false)}
-                                className="glass-dark hover:bg-white/80 text-slate-400 hover:text-red-500 p-4 rounded-3xl transition-all shadow-glass ring-1 ring-white/50"
+                                className="glass-dark hover:bg-white/80 text-slate-400 hover:text-red-500 p-4 rounded-3xl transition-all shadow-glass ring-1 ring-white/50 cursor-pointer"
                             >
                                 <span className="material-icons text-2xl">close</span>
                             </button>
@@ -210,7 +217,7 @@ const OperationalLotGrid: React.FC<OperationalLotGridProps> = ({ shipments, onLo
                             </div>
                             <button 
                                 onClick={() => setIsMaximized(false)}
-                                className="px-10 py-4 bg-indigo-600 text-white rounded-[2rem] text-xs font-black uppercase tracking-[0.25em] hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-200"
+                                className="px-10 py-4 bg-indigo-600 text-white rounded-[2rem] text-xs font-black uppercase tracking-[0.25em] hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-200 cursor-pointer"
                             >
                                 Revert to Brief View
                             </button>

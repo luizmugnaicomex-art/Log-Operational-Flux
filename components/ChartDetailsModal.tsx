@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { Shipment } from '../types';
 import { currencyFormatter } from '../utils/formatters';
@@ -16,11 +15,20 @@ interface ChartDetailsModalProps {
 
 const isValidDate = (d: any): d is Date => d instanceof Date && !isNaN(d.getTime());
 
-const ChartDetailsModal: React.FC<ChartDetailsModalProps> = ({ isOpen, onClose, weekLabel, shipments, avgDrainRate = 1, groupedData }) => {
+const ChartDetailsModal: React.FC<ChartDetailsModalProps> = ({ 
+    isOpen, 
+    onClose, 
+    weekLabel = '', 
+    shipments = [], 
+    avgDrainRate = 1, 
+    groupedData 
+}) => {
     const [showOnlyPending, setShowOnlyPending] = useState(false);
     const [showOnlyPicked, setShowOnlyPicked] = useState(false);
     const [expandedVessels, setExpandedVessels] = useState<Record<string, boolean>>({});
     const [expandedBLs, setExpandedBLs] = useState<Record<string, boolean>>({});
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 50;
 
     const toggleVessel = (vessel: string) => {
         setExpandedVessels(prev => ({ ...prev, [vessel]: !prev[vessel] }));
@@ -30,16 +38,17 @@ const ChartDetailsModal: React.FC<ChartDetailsModalProps> = ({ isOpen, onClose, 
         setExpandedBLs(prev => ({ ...prev, [bl]: !prev[bl] }));
     };
 
+    // Filter displayed shipments safely
     const displayedShipments = useMemo(() => {
-        if (!shipments) return [];
+        if (!isOpen || !Array.isArray(shipments)) return [];
         let filtered = shipments;
         if (showOnlyPending) {
-             filtered = filtered.filter(s => s && isValidDate(s.deliveryByd) === false);
+            filtered = filtered.filter(s => s && !isValidDate(s.deliveryByd));
         } else if (showOnlyPicked) {
-             filtered = filtered.filter(s => s && isValidDate(s.deliveryByd) === true);
+            filtered = filtered.filter(s => s && isValidDate(s.deliveryByd));
         }
         return filtered;
-    }, [shipments, showOnlyPending, showOnlyPicked]);
+    }, [isOpen, shipments, showOnlyPending, showOnlyPicked]);
 
     const isDemurrageView = (weekLabel || '').toLowerCase().includes('demurrage') || (weekLabel || '').toLowerCase().includes('risk');
     const isClearanceView = (weekLabel || '').toLowerCase().includes('clearance') || (weekLabel || '').toLowerCase().includes('customs');
@@ -50,7 +59,7 @@ const ChartDetailsModal: React.FC<ChartDetailsModalProps> = ({ isOpen, onClose, 
     const isPipelineView = (weekLabel || '').toLowerCase().includes('pipeline') || (weekLabel || '').toLowerCase().includes('week drilldown') || (weekLabel || '').toLowerCase().includes('drilldown') || isInventoryView;
 
     const pipelineSummary = useMemo(() => {
-        if (!isOpen || !isPipelineView || !shipments || shipments.length === 0) return null;
+        if (!isOpen || !isPipelineView || !Array.isArray(shipments) || shipments.length === 0) return null;
         
         const dates = shipments
             .map(s => s ? (s.ata || s.estimatedDelivery) : null)
@@ -75,7 +84,7 @@ const ChartDetailsModal: React.FC<ChartDetailsModalProps> = ({ isOpen, onClose, 
     }, [isOpen, isPipelineView, shipments]);
 
     const pipelineDailyBreakdown = useMemo(() => {
-        if (!isOpen || !isPipelineView || !shipments) return [];
+        if (!isOpen || !isPipelineView || !Array.isArray(shipments) || shipments.length === 0) return [];
         const dailyMap: Record<string, { date: Date; qty: number; vessels: Set<string> }> = {};
         
         shipments.forEach(s => {
@@ -95,11 +104,11 @@ const ChartDetailsModal: React.FC<ChartDetailsModalProps> = ({ isOpen, onClose, 
             }
         });
 
-        return Object.values(dailyMap).sort((a, b) => a.date.getTime() - b.date.getTime()).slice(0, 30); // Max 30 days
+        return Object.values(dailyMap).sort((a, b) => a.date.getTime() - b.date.getTime()).slice(0, 30);
     }, [isOpen, isPipelineView, shipments]);
 
     const pipelineVesselBreakdown = useMemo(() => {
-        if (!isOpen || !isPipelineView || !shipments) return [];
+        if (!isOpen || !isPipelineView || !Array.isArray(shipments) || shipments.length === 0) return [];
         const vesselMap: Record<string, { name: string; qty: number; minEta: Date | null; maxEta: Date | null; terminals: Record<string, number> }> = {};
 
         shipments.forEach(s => {
@@ -120,11 +129,11 @@ const ChartDetailsModal: React.FC<ChartDetailsModalProps> = ({ isOpen, onClose, 
             vesselMap[name].terminals[terminal] = (vesselMap[name].terminals[terminal] || 0) + 1;
         });
 
-        return Object.values(vesselMap).sort((a, b) => b.qty - a.qty).slice(0, 20); // Max 20 vessels
+        return Object.values(vesselMap).sort((a, b) => b.qty - a.qty).slice(0, 20);
     }, [isOpen, isPipelineView, shipments]);
 
     const totalCostInView = useMemo(() => {
-        if (!isOpen || !shipments) return 0;
+        if (!isOpen || !Array.isArray(shipments) || shipments.length === 0) return 0;
         if (isProjectedView) {
             const todayUTC = new Date();
             todayUTC.setHours(0,0,0,0);
@@ -135,37 +144,35 @@ const ChartDetailsModal: React.FC<ChartDetailsModalProps> = ({ isOpen, onClose, 
                 
                 try {
                     const daysAlreadyInBacklog = (todayUTC.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24);
-                    const estimatedDaysToDrain = index / avgDrainRate;
+                    const safeRate = Math.max(0.1, avgDrainRate);
+                    const estimatedDaysToDrain = index / safeRate;
                     const projectedDays = Math.ceil(daysAlreadyInBacklog + estimatedDaysToDrain);
                     const contract = getContractForWarehouse(s.bondedWarehouse);
                     const cost = calculateWarehouseCost(contract, DEFAULT_CARGO_VALUE, projectedDays, 1);
-                    return sum + cost.total;
+                    return sum + (cost?.total || 0);
                 } catch (e) {
                     return sum;
                 }
             }, 0);
         }
-        return shipments.reduce((sum, s) => sum + (s ? (isDemurrageView ? s.demurrageCost : (s.totalCost || 0)) : 0), 0);
+        return shipments.reduce((sum, s) => sum + (s ? (isDemurrageView ? (s.demurrageCost || 0) : (s.totalCost || 0)) : 0), 0);
     }, [isOpen, shipments, isDemurrageView, isProjectedView, avgDrainRate]);
 
     const { pendingCount, lateShipments, pickedCount } = useMemo(() => {
-        if (!isOpen || !shipments) return { pendingCount: 0, lateShipments: 0, pickedCount: 0 };
+        if (!isOpen || !Array.isArray(shipments)) return { pendingCount: 0, lateShipments: 0, pickedCount: 0 };
         return {
             pendingCount: shipments.filter(s => s && !s.deliveryByd).length,
             pickedCount: shipments.filter(s => s && s.deliveryByd).length,
-            lateShipments: shipments.filter(s => s && s.clientDeliveryVariance !== null && s.clientDeliveryVariance > 0).length
+            lateShipments: shipments.filter(s => s && s.clientDeliveryVariance !== null && (s.clientDeliveryVariance || 0) > 0).length
         };
     }, [isOpen, shipments]);
 
     const tableData = useMemo(() => {
-        if (!isOpen || !displayedShipments) return [];
+        if (!isOpen || !Array.isArray(displayedShipments)) return [];
         const todayUTC = new Date();
         todayUTC.setHours(0,0,0,0);
 
-        // Pre-slice to only process 500 items maximum to greatly improve loop performance on large datasets
-        const itemsToProcess = displayedShipments.slice(0, 500);
-
-        const result = itemsToProcess.map((s, idx) => {
+        const result = displayedShipments.map((s, idx) => {
             if (!s) return null;
             let projectedCost = '-';
             let currentAge = '-';
@@ -175,7 +182,8 @@ const ChartDetailsModal: React.FC<ChartDetailsModalProps> = ({ isOpen, onClose, 
                 if (isValidDate(start)) {
                     try {
                         const daysAlreadyInBacklog = (todayUTC.getTime() - start.getTime()) / (1000 * 60 * 60 * 24);
-                        const estimatedDaysToDrain = idx / avgDrainRate;
+                        const safeRate = Math.max(0.1, avgDrainRate);
+                        const estimatedDaysToDrain = idx / safeRate;
                         const projectedDays = Math.ceil(daysAlreadyInBacklog + estimatedDaysToDrain);
                         const contract = getContractForWarehouse(s.bondedWarehouse);
                         const cost = calculateWarehouseCost(contract, DEFAULT_CARGO_VALUE, projectedDays, 1);
@@ -204,7 +212,7 @@ const ChartDetailsModal: React.FC<ChartDetailsModalProps> = ({ isOpen, onClose, 
     const getStatusBadge = (s: Shipment) => {
         const isDelivered = !!s.deliveryByd;
         const isReturned = !!s.actualDepotReturnDate;
-        const hasDemurrage = s.demurrageCost > 0;
+        const hasDemurrage = (s.demurrageCost || 0) > 0;
 
         if (!isDelivered) {
             return (
@@ -376,45 +384,11 @@ const ChartDetailsModal: React.FC<ChartDetailsModalProps> = ({ isOpen, onClose, 
                                                 </table>
                                             </div>
                                         </div>
-
-                                        {/* How to read this */}
-                                        <div className="p-10 glass-dark rounded-[2.5rem] border-none ring-1 ring-white/20">
-                                            <h4 className="text-[11px] font-black text-slate-800 uppercase tracking-[0.3em] mb-6 pl-1 decoration-indigo-600/30 underline decoration-2 underline-offset-8">Critical Heuristics</h4>
-                                            <ul className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                                                <li className="flex flex-col gap-3 group">
-                                                    <div className="w-8 h-8 rounded-xl glass flex items-center justify-center text-indigo-600 group-hover:scale-110 transition-transform">
-                                                        <span className="material-icons text-lg">collision</span>
-                                                    </div>
-                                                    <p className="text-[11px] text-slate-500 font-bold leading-relaxed">
-                                                        <span className="text-indigo-600 font-black block mb-1 uppercase tracking-widest">Time Collision</span>
-                                                        Capacity breach happens when Factory drain days exceeds goal (&gt;10d) vs standard 150/day.
-                                                    </p>
-                                                </li>
-                                                <li className="flex flex-col gap-3 group">
-                                                    <div className="w-8 h-8 rounded-xl glass flex items-center justify-center text-amber-600 group-hover:scale-110 transition-transform">
-                                                        <span className="material-icons text-lg">stacked_line_chart</span>
-                                                    </div>
-                                                    <p className="text-[11px] text-slate-500 font-bold leading-relaxed">
-                                                        <span className="text-amber-600 font-black block mb-1 uppercase tracking-widest">Peak Saturation</span>
-                                                        Identifies day-level stacking where multiple high-capacity vessels converge simultaneously.
-                                                    </p>
-                                                </li>
-                                                <li className="flex flex-col gap-3 group">
-                                                    <div className="w-8 h-8 rounded-xl glass flex items-center justify-center text-emerald-600 group-hover:scale-110 transition-transform">
-                                                        <span className="material-icons text-lg">hub</span>
-                                                    </div>
-                                                    <p className="text-[11px] text-slate-500 font-bold leading-relaxed">
-                                                        <span className="text-emerald-600 font-black block mb-1 uppercase tracking-widest">Cluster Mapping</span>
-                                                        Terminals use fuzzy normalization algorithms to consolidate naming variations into logic clusters.
-                                                    </p>
-                                                </li>
-                                            </ul>
-                                        </div>
                                     </div>
                                 )}
 
                                 {/* Detailed Process Table */}
-                                    <div className="mt-12">
+                                <div className="mt-12">
                                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-6">
                                         <div>
                                             <h4 className="text-[11px] font-black text-slate-800 uppercase tracking-[0.25em] opacity-80 decoration-indigo-600/30 underline decoration-2 underline-offset-4">Considered Process Log</h4>
@@ -422,13 +396,12 @@ const ChartDetailsModal: React.FC<ChartDetailsModalProps> = ({ isOpen, onClose, 
                                         </div>
                                         <div className="flex flex-wrap items-center gap-4">
                                             <button 
-                                                onClick={() => exportShipmentsToExcel(displayedShipments, `${weekLabel.replace(/\s+/g, '_')}_Export.xlsx`)}
+                                                onClick={() => exportShipmentsToExcel(displayedShipments, `${(weekLabel || 'Data').replace(/\s+/g, '_')}_Export.xlsx`)}
                                                 className="flex items-center gap-3 px-8 py-3 rounded-[1.5rem] text-[10px] font-black uppercase tracking-[0.15em] transition-all shadow-lg bg-emerald-600 text-white shadow-emerald-200/50 hover:bg-emerald-700 hover:scale-105 active:scale-95"
                                             >
                                                 <span className="material-icons text-base">download</span>
                                                 Export System
                                             </button>
-                                            <div className="h-10 w-[1px] bg-white/20 mx-2 hidden sm:block"></div>
                                             <button 
                                                 onClick={() => {
                                                     setShowOnlyPending(!showOnlyPending);
@@ -440,7 +413,7 @@ const ChartDetailsModal: React.FC<ChartDetailsModalProps> = ({ isOpen, onClose, 
                                                     : 'glass text-slate-600 ring-white/50 hover:bg-white/80'
                                                 }`}
                                             >
-                                                <span className="material-icons text-base">{showOnlyPending ? 'pending_actions' : 'pending_actions'}</span>
+                                                <span className="material-icons text-base">pending_actions</span>
                                                 Pending Layer ({pendingCount})
                                             </button>
                                             <button 
@@ -454,13 +427,9 @@ const ChartDetailsModal: React.FC<ChartDetailsModalProps> = ({ isOpen, onClose, 
                                                     : 'glass text-slate-600 ring-white/50 hover:bg-white/80'
                                                 }`}
                                             >
-                                                <span className="material-icons text-base">{showOnlyPicked ? 'local_shipping' : 'local_shipping'}</span>
-                                                picked layer ({pickedCount})
+                                                <span className="material-icons text-base">local_shipping</span>
+                                                Picked Layer ({pickedCount})
                                             </button>
-                                            <div className="h-10 w-[1px] bg-white/20 mx-2 hidden sm:block"></div>
-                                            <span className="text-[10px] font-black text-slate-400 glass px-6 py-3 rounded-[1.5rem] ring-1 ring-white/50 shadow-glass opacity-60">
-                                                {displayedShipments.length} FLUX UNITS
-                                            </span>
                                         </div>
                                     </div>
 
@@ -480,13 +449,13 @@ const ChartDetailsModal: React.FC<ChartDetailsModalProps> = ({ isOpen, onClose, 
                                                                 <span className="font-black text-slate-800 uppercase tracking-[0.15em] group-hover:translate-x-1 transition-transform">{vessel}</span>
                                                             </div>
                                                             <span className="text-[10px] font-black text-slate-500 glass px-4 py-2 rounded-xl ring-1 ring-white/50 shadow-sm uppercase tracking-widest">
-                                                                {Object.keys(bls).length} BL UNITS
+                                                                {Object.keys(bls || {}).length} BL UNITS
                                                             </span>
                                                         </button>
                                                         
                                                         {expandedVessels[vessel] && (
                                                             <div className="p-6 space-y-4 bg-white/10">
-                                                                {Object.entries(bls).map(([bl, containers]) => (
+                                                                {Object.entries(bls || {}).map(([bl, containers]) => (
                                                                     <div key={bl} className="glass-dark border-none rounded-2xl overflow-hidden ring-1 ring-white/10 shadow-sm">
                                                                         <button 
                                                                             onClick={() => toggleBL(bl)}
@@ -572,7 +541,7 @@ const ChartDetailsModal: React.FC<ChartDetailsModalProps> = ({ isOpen, onClose, 
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-white/10 text-slate-800">
-                                                {tableData.map((s, idx) => {
+                                                {tableData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((s, idx) => {
                                                     const isDelivered = !!s.deliveryByd;
                                                     return (
                                                         <tr key={idx} className={`hover:bg-white/40 transition-all group ${!isDelivered ? 'bg-amber-500/5' : ''}`}>
@@ -589,7 +558,7 @@ const ChartDetailsModal: React.FC<ChartDetailsModalProps> = ({ isOpen, onClose, 
                                                                     <td className="px-6 py-5 text-[11px] font-medium text-slate-400">{isValidDate(s.freeTimeDate) ? s.freeTimeDate.toLocaleDateString() : 'N/A'}</td>
                                                                     <td className="px-6 py-5 text-[11px] font-black text-slate-800">{isValidDate(s.actualDepotReturnDate) ? s.actualDepotReturnDate.toLocaleDateString() : 'Pending'}</td>
                                                                     <td className="px-8 py-5 text-sm font-black text-right text-red-600">
-                                                                        {s.demurrageCost > 0 ? currencyFormatter.format(s.demurrageCost) : '-'}
+                                                                        {(s.demurrageCost || 0) > 0 ? currencyFormatter.format(s.demurrageCost) : '-'}
                                                                     </td>
                                                                 </>
                                                             ) : isClearanceView ? (
@@ -644,7 +613,7 @@ const ChartDetailsModal: React.FC<ChartDetailsModalProps> = ({ isOpen, onClose, 
                                                         </tr>
                                                     );
                                                 })}
-                                                {displayedShipments.length === 0 && (
+                                                {tableData.length === 0 && (
                                                     <tr>
                                                         <td colSpan={8} className="px-8 py-48 text-center bg-white/5">
                                                             <div className="flex flex-col items-center gap-6 animate-in zoom-in-75 duration-700">
@@ -678,11 +647,27 @@ const ChartDetailsModal: React.FC<ChartDetailsModalProps> = ({ isOpen, onClose, 
                                                 )}
                                             </tbody>
                                         </table>
-                                        {displayedShipments.length > 500 && (
-                                            <div className="px-10 py-5 glass-dark text-center border-t border-white/20">
-                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.4em] opacity-60">
-                                                    Capsule View: Truncated at 500 of {displayedShipments.length} Strategic Nodes.
+                                        {Math.ceil(tableData.length / itemsPerPage) > 1 && (
+                                            <div className="px-10 py-5 glass-dark flex items-center justify-between border-t border-white/20">
+                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] opacity-80">
+                                                    Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, tableData.length)} of {tableData.length} records
                                                 </p>
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                                        disabled={currentPage === 1}
+                                                        className="px-4 py-2 glass rounded-xl text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white/80 transition-all font-black"
+                                                    >
+                                                        Prev
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setCurrentPage(p => Math.min(Math.ceil(tableData.length / itemsPerPage), p + 1))}
+                                                        disabled={currentPage === Math.ceil(tableData.length / itemsPerPage)}
+                                                        className="px-4 py-2 glass rounded-xl text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white/80 transition-all font-black"
+                                                    >
+                                                        Next
+                                                    </button>
+                                                </div>
                                             </div>
                                         )}
                                         </>

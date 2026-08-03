@@ -1,8 +1,12 @@
-
 import { Shipment, KpiData, ChartData, PipelineWeek, PortYardDashboardData } from '../types';
 import { estimateFinancialExposure } from './financials';
 
-const avg = (arr: number[]): number => arr.length === 0 ? 0 : arr.reduce((a, b) => a + b, 0) / arr.length;
+const avg = (arr: number[]): number => {
+    if (!Array.isArray(arr) || arr.length === 0) return 0;
+    const valid = arr.filter(n => typeof n === 'number' && !isNaN(n));
+    if (valid.length === 0) return 0;
+    return valid.reduce((a, b) => a + b, 0) / valid.length;
+};
 
 const DAILY_GOAL_TARGET = 150;
 const GATE_CAPACITY_DAY = 170;
@@ -29,36 +33,40 @@ const WAREHOUSE_CAPACITIES: Record<string, number> = {
     'BUFFER - TERCAM': 350
 };
 
+const isValidDate = (d: any): d is Date => d instanceof Date && !isNaN(d.getTime());
+
 const parseDate = (dateInput: any): Date | null => {
     if (!dateInput) return null;
     
     if (dateInput instanceof Date) {
-        if (isNaN(dateInput.getTime()) || dateInput.getFullYear() < 2000) return null;
+        if (!isValidDate(dateInput) || dateInput.getFullYear() < 2000) return null;
         return dateInput;
     }
 
     if (typeof dateInput === 'number') {
         if (dateInput > 36526 && dateInput < 2958465) { 
              const utc_days  = Math.floor(dateInput - 25569);
-             const utc_value = utc_days * 86400;                                        
+             const utc_value = utc_days * 86400;                                         
              const date_info = new Date(utc_value * 1000);
-             return date_info;
+             return isValidDate(date_info) ? date_info : null;
         }
     }
 
     if (typeof dateInput === 'string') {
         const trimmed = dateInput.trim();
+        if (!trimmed) return null;
+
         const ddmmyyyy = trimmed.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/);
         if (ddmmyyyy) {
             const day = parseInt(ddmmyyyy[1], 10);
             const month = parseInt(ddmmyyyy[2], 10) - 1;
             const year = parseInt(ddmmyyyy[3], 10);
             const date = new Date(year, month, day);
-            if (!isNaN(date.getTime()) && date.getTime() > 0) return date;
+            if (isValidDate(date) && date.getTime() > 0) return date;
         }
 
         const date = new Date(dateInput);
-        if (!isNaN(date.getTime())) {
+        if (isValidDate(date)) {
             if (date.getFullYear() < 2000) return null;
             const userTimezoneOffset = date.getTimezoneOffset() * 60000;
             return new Date(date.getTime() + userTimezoneOffset);
@@ -68,11 +76,12 @@ const parseDate = (dateInput: any): Date | null => {
 };
 
 export const toUTC = (date: Date): Date => {
+    if (!isValidDate(date)) return new Date(0);
     return new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
 };
 
 export const dateDiffInDays = (date1: Date | null, date2: Date | null): number | null => {
-    if (!date1 || !date2) return null;
+    if (!date1 || !date2 || !isValidDate(date1) || !isValidDate(date2)) return null;
     const _MS_PER_DAY = 1000 * 60 * 60 * 24;
     const utc1 = toUTC(date1);
     const utc2 = toUTC(date2);
@@ -80,6 +89,7 @@ export const dateDiffInDays = (date1: Date | null, date2: Date | null): number |
 };
 
 export const getISOWeek = (date: Date) => {
+    if (!isValidDate(date)) return { week: 1, year: 2026 };
     const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
     const dayNum = d.getUTCDay() || 7;
     d.setUTCDate(d.getUTCDate() + 4 - dayNum);
@@ -89,23 +99,52 @@ export const getISOWeek = (date: Date) => {
 };
 
 export const getWeekDateRangeStr = (week: number, year: number): string => {
-    const simple = new Date(Date.UTC(year, 0, 1 + (week - 1) * 7));
-    const dow = simple.getUTCDay() || 7;
-    const start = new Date(simple);
-    start.setUTCDate(simple.getUTCDate() - dow + 1);
-    
-    const end = new Date(start);
-    end.setUTCDate(start.getUTCDate() + 6);
+    try {
+        const simple = new Date(Date.UTC(year, 0, 1 + (week - 1) * 7));
+        const dow = simple.getUTCDay() || 7;
+        const start = new Date(simple);
+        start.setUTCDate(simple.getUTCDate() - dow + 1);
+        
+        const end = new Date(start);
+        end.setUTCDate(start.getUTCDate() + 6);
 
-    const formatDay = (d: Date) => d.getUTCDate().toString().padStart(2, '0');
-    const getMonthStr = (d: Date) => ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getUTCMonth()];
+        const formatDay = (d: Date) => d.getUTCDate().toString().padStart(2, '0');
+        const getMonthStr = (d: Date) => ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getUTCMonth()];
 
-    return `${formatDay(start)} ${getMonthStr(start)} - ${formatDay(end)} ${getMonthStr(end)}`;
+        return `${formatDay(start)} ${getMonthStr(start)} - ${formatDay(end)} ${getMonthStr(end)}`;
+    } catch (e) {
+        return `W${week} - ${year}`;
+    }
 };
 
 export const processRawData = (data: any[][]): { shipments: Shipment[], carriers: string[], analysts: string[], cargos: string[], containerTypes: string[], incoterms: string[], romaneioStatuses: string[], years: number[], statusComexList: string[], generalWarehouseList: string[] } => {
-    const headerRow = data.find(row => Array.isArray(row) && row.some(cell => String(cell).toUpperCase().includes("SHIPPER")));
-    if (!headerRow) throw new Error("Could not find a valid header row in the Excel file.");
+    if (!Array.isArray(data) || data.length === 0) {
+        throw new Error("The uploaded spreadsheet is empty.");
+    }
+
+    const headerRow = data.find(row => {
+        if (!Array.isArray(row)) return false;
+        return row.some(cell => {
+            const val = String(cell || '').toUpperCase();
+            return val.includes("SHIPPER") || 
+                   val.includes("CONTAINER") || 
+                   val.includes("CONHECIMENTO") || 
+                   val.includes("BILL OF LADING") || 
+                   val.includes("ARMADOR") || 
+                   val.includes("VESSEL") || 
+                   val.includes("NAVIO") || 
+                   val.includes("DISCHARGE") || 
+                   val.includes("ANALISTA") || 
+                   val.includes("ANALYST") ||
+                   val.includes("LOADING TYPE") ||
+                   val.includes("TERMINAL") ||
+                   val.includes("BONDED WAREHOUSE") ||
+                   val.includes("LOT NUMBER") ||
+                   val.includes("BATCH") ||
+                   val.includes("FREE TIME");
+        });
+    });
+    if (!headerRow) throw new Error("Could not find a valid header row containing recognizable column names in the Excel file.");
 
     const headers = headerRow.map(h => 
         String(h || '')
@@ -138,7 +177,7 @@ export const processRawData = (data: any[][]): { shipments: Shipment[], carriers
         containerType: findHeaderIndex('LOADING TYPE', 'CONTAINER TYPE', 'TYPE', 'LOAD TYPE', 'FCL/LCL', 'SERVICE TYPE', 'TIPO', 'CARGO TYPE', 'TIPO DE CARGA'),
         incoterm: findHeaderIndex('INCOTERM', 'TERM', 'INCOTERMS'),
         bondedWarehouse: findHeaderIndex('TERMINAL', 'BONDED WAREHOUSE', 'ARMAZEM', 'DEPOT', 'LOCAL', 'RECINTO', 'PICK UP LOCATION', 'LOCAL DE RETIRADA', 'DESTINATION TERMINAL', 'ARMAZÉM'),
-        depot: findHeaderIndex('DEPOT', 'DEPOT RETURN', 'LOCAL DE DEVOLUÇÃO'), // Column AZ
+        depot: findHeaderIndex('DEPOT', 'DEPOT RETURN', 'LOCAL DE DEVOLUÇÃO'),
         ata: findHeaderIndex('ATA', 'ARRIVAL', 'DISCHARGE DATE', 'ACTUAL ETA', 'ETA', 'ARRIVAL DATE'),
         deliveryByd: findHeaderIndex('DELIVERY DATE AT BYD', 'DELIVERY DATE', 'DATA ENTREGA', 'DELIVERED', 'ENTREGUE'),
         estimatedDelivery: findHeaderIndex('ESTIMATED DELIVERY DATE', 'ESTIMATED DELIVERY'),
@@ -182,65 +221,75 @@ export const processRawData = (data: any[][]): { shipments: Shipment[], carriers
     const generalWarehouseSet = new Set<string>();
     
     const years = new Set<number>([new Date().getFullYear()]);
-    
     const seenContainers = new Set<string>();
     const headerIndex = data.indexOf(headerRow);
 
-    const shipments: Shipment[] = data.slice(headerIndex + 1).map(row => {
-        if (!row || row.length === 0 || !row[indices.shipper]) return null;
-
+    const shipments: Shipment[] = [];
+    const rows = data.slice(headerIndex + 1);
+    
+    for (let r = 0; r < rows.length; r++) {
+        const row = rows[r];
+        if (!Array.isArray(row) || row.length === 0) continue;
+        
         const containerNumber = indices.containerNumber !== -1 ? String(row[indices.containerNumber] || '').trim() : '';
-        const billOfLading = indices.billOfLading !== -1 ? String(row[indices.billOfLading] || '').trim() : 'N/A';
+        const shipperRaw = indices.shipper !== -1 ? row[indices.shipper] : '';
+        
+        // Skip completely empty rows or rows missing both a container number and shipper
+        if (!containerNumber && !shipperRaw) continue;
 
         if (containerNumber && seenContainers.has(containerNumber)) {
-            return null;
+            continue;
         }
         if (containerNumber) {
             seenContainers.add(containerNumber);
         }
 
-        const ataDate = parseDate(row[indices.ata]);
+        const billOfLading = indices.billOfLading !== -1 ? String(row[indices.billOfLading] || '').trim() : 'N/A';
+
+        // Parse each date exactly once
+        const ataDate = indices.ata !== -1 ? parseDate(row[indices.ata]) : null;
         if (ataDate) years.add(ataDate.getFullYear());
 
-        const deliveryBydDate = parseDate(row[indices.deliveryByd]);
+        const deliveryBydDate = indices.deliveryByd !== -1 ? parseDate(row[indices.deliveryByd]) : null;
         if (deliveryBydDate) years.add(deliveryBydDate.getFullYear());
 
-        const estimatedDeliveryDate = parseDate(row[indices.estimatedDelivery]);
-        const dateNFDate = parseDate(row[indices.dateNF]);
-        const cargoReadyDate = parseDate(row[indices.cargoReadyDate]);
-        const channelDate = parseDate(row[indices.channelDate]);
-        const unloadDate = parseDate(row[indices.unloadDate]);
-        const actualDepotReturnDate = parseDate(row[indices.actualDepotReturnDate]);
+        const estimatedDeliveryDate = indices.estimatedDelivery !== -1 ? parseDate(row[indices.estimatedDelivery]) : null;
+        const dateNFDate = indices.dateNF !== -1 ? parseDate(row[indices.dateNF]) : null;
+        const cargoReadyDate = indices.cargoReadyDate !== -1 ? parseDate(row[indices.cargoReadyDate]) : null;
+        const channelDate = indices.channelDate !== -1 ? parseDate(row[indices.channelDate]) : null;
+        const unloadDate = indices.unloadDate !== -1 ? parseDate(row[indices.unloadDate]) : null;
+        const actualDepotReturnDate = indices.actualDepotReturnDate !== -1 ? parseDate(row[indices.actualDepotReturnDate]) : null;
+        const estimatedDepotDate = indices.estimatedDepotDate !== -1 ? parseDate(row[indices.estimatedDepotDate]) : null;
 
-        let deadlineReturnDate = parseDate(row[indices.deadlineReturnDate]);
+        let deadlineReturnDate = indices.deadlineReturnDate !== -1 ? parseDate(row[indices.deadlineReturnDate]) : null;
         const rawFreeTime = indices.freeTimeDate !== -1 ? row[indices.freeTimeDate] : undefined;
         
-        if (!deadlineReturnDate && ataDate && rawFreeTime) {
-             const parsedNum = parseInt(rawFreeTime, 10);
+        if (!deadlineReturnDate && ataDate && rawFreeTime != null) {
+             const parsedNum = parseInt(String(rawFreeTime), 10);
              if (!isNaN(parsedNum)) {
                  const computedDeadline = new Date(ataDate);
                  computedDeadline.setDate(computedDeadline.getDate() + parsedNum);
-                 deadlineReturnDate = computedDeadline;
+                 deadlineReturnDate = isValidDate(computedDeadline) ? computedDeadline : null;
              }
         }
         
-        let freeTimeDate = deadlineReturnDate; 
+        const freeTimeDate = deadlineReturnDate; 
 
         let shipowner = indices.shipowner !== -1 ? String(row[indices.shipowner] || '').trim().toUpperCase() : '';
         if (shipowner === 'CSSC') shipowner = 'COSCO';
 
-        let carrierRaw = String(row[indices.carrier] || 'Unknown');
+        let carrierRaw = String(indices.carrier !== -1 ? row[indices.carrier] || 'Unknown' : 'Unknown');
         if (carrierRaw.trim().toUpperCase() === 'CSSC') carrierRaw = 'COSCO';
         const carrier = (carrierRaw === 'Unknown' || carrierRaw === '') ? 'Unknown' : carrierRaw;
 
-        const analyst = String(row[indices.analyst] || 'Unknown');
+        const analyst = String(indices.analyst !== -1 ? row[indices.analyst] || 'Unknown' : 'Unknown');
         const technicianResponsibleChinaTeam = indices.technicianResponsibleChinaTeam !== -1 ? String(row[indices.technicianResponsibleChinaTeam] || '').trim() : undefined;
         const reference = indices.reference !== -1 ? String(row[indices.reference] || '').trim() : undefined;
         const voyage = indices.voyage !== -1 ? String(row[indices.voyage] || '').trim() : undefined;
         const cargoPresence = indices.cargoPresence !== -1 ? String(row[indices.cargoPresence] || '').trim() : undefined;
         const operationScope = indices.operationScope !== -1 ? String(row[indices.operationScope] || '').trim() : undefined;
-        const loadingDate = parseDate(row[indices.loadingDate]);
-        const containerPuttedDownAtBydBuffer = parseDate(row[indices.containerPuttedDownAtBydBuffer]);
+        const loadingDate = indices.loadingDate !== -1 ? parseDate(row[indices.loadingDate]) : null;
+        const containerPuttedDownAtBydBuffer = indices.containerPuttedDownAtBydBuffer !== -1 ? parseDate(row[indices.containerPuttedDownAtBydBuffer]) : null;
         const containerStatusAtBuffer = indices.containerStatusAtBuffer !== -1 ? String(row[indices.containerStatusAtBuffer] || '').trim() : undefined;
         const emptyContainerReturnOperation = indices.emptyContainerReturnOperation !== -1 ? String(row[indices.emptyContainerReturnOperation] || '').trim() : undefined;
 
@@ -256,8 +305,8 @@ export const processRawData = (data: any[][]): { shipments: Shipment[], carriers
         const cargoParam = indices.cargo !== -1 ? String(row[indices.cargo] || '').trim() : '';
         const cargo = normalizeName(cargoParam);
         
-        let cargoTypeStr = indices.cargoModelFirst !== -1 ? String(row[indices.cargoModelFirst] || '').trim() : '';
-        let cargoDescStr = indices.cargoModelFallback !== -1 ? String(row[indices.cargoModelFallback] || '').trim() : '';
+        const cargoTypeStr = indices.cargoModelFirst !== -1 ? String(row[indices.cargoModelFirst] || '').trim() : '';
+        const cargoDescStr = indices.cargoModelFallback !== -1 ? String(row[indices.cargoModelFallback] || '').trim() : '';
         let extractedModel = cargoTypeStr !== '' ? cargoTypeStr : (cargoDescStr !== '' ? cargoDescStr : 'Other');
         extractedModel = normalizeName(extractedModel);
 
@@ -299,14 +348,14 @@ export const processRawData = (data: any[][]): { shipments: Shipment[], carriers
         if (statusComex) statusComexSet.add(statusComex);
         if (generalWarehouse) generalWarehouseSet.add(generalWarehouse);
 
-        const rawParam = String(row[indices.parametrization] || 'Unknown').trim();
+        const rawParam = String(indices.parametrization !== -1 ? row[indices.parametrization] || 'Unknown' : 'Unknown').trim();
         const parametrization = rawParam.length > 0
             ? rawParam.charAt(0).toUpperCase() + rawParam.slice(1).toLowerCase()
             : 'Unknown';
 
-        const totalCostRaw = indices.totalCost !== -1 ? Number(row[indices.totalCost]) : 0;
-        const taxCostRaw = indices.taxCost !== -1 ? Number(row[indices.taxCost]) : 0;
-        const extraCostRaw = indices.extraCost !== -1 ? Number(row[indices.extraCost]) : 0;
+        const totalCostRaw = indices.totalCost !== -1 ? Number(row[indices.totalCost]) || 0 : 0;
+        const taxCostRaw = indices.taxCost !== -1 ? Number(row[indices.taxCost]) || 0 : 0;
+        const extraCostRaw = indices.extraCost !== -1 ? Number(row[indices.extraCost]) || 0 : 0;
 
         let demurrageDays = 0;
         let calculatedDemurrageCost = 0;
@@ -323,22 +372,22 @@ export const processRawData = (data: any[][]): { shipments: Shipment[], carriers
             }
 
             if (demurrageDays > 0) {
-                let rate = DEMURRAGE_RATES[shipowner] || 0;
+                const rate = DEMURRAGE_RATES[shipowner] || 0;
                 calculatedDemurrageCost = demurrageDays * rate;
             }
         }
 
         const finalDemurrageCost = calculatedDemurrageCost > 0 
             ? calculatedDemurrageCost 
-            : (Number(row[indices.demurrageCost]) || 0);
+            : (indices.demurrageCost !== -1 ? Number(row[indices.demurrageCost]) || 0 : 0);
 
-        return {
+        shipments.push({
             containerNumber,
             billOfLading,
             lotNumber: indices.lotNumber !== -1 ? String(row[indices.lotNumber] || 'N/A').trim() : 'N/A',
             batchNumber: indices.batchNumber !== -1 ? String(row[indices.batchNumber] || '0').trim() : '0',
             cargoModel: extractedModel,
-            shipper: String(row[indices.shipper] || ''),
+            shipper: String(shipperRaw || 'Unknown Shipper'),
             shipowner,
             cargo,
             vesselName,
@@ -367,7 +416,7 @@ export const processRawData = (data: any[][]): { shipments: Shipment[], carriers
             cargoReadyDate: cargoReadyDate,
             channelDate: channelDate,
             actualDepotReturnDate: actualDepotReturnDate,
-            estimatedDepotDate: parseDate(row[indices.estimatedDepotDate]),
+            estimatedDepotDate: estimatedDepotDate,
             freeTimeDate: freeTimeDate,
             totalCost: totalCostRaw,
             taxCost: taxCostRaw,
@@ -381,15 +430,15 @@ export const processRawData = (data: any[][]): { shipments: Shipment[], carriers
             portToCustomsTime: dateDiffInDays(ataDate, cargoReadyDate),
             transportDeliveryTime: dateDiffInDays(cargoReadyDate, deliveryBydDate),
             containerStreetTurnTime: dateDiffInDays(deliveryBydDate, actualDepotReturnDate),
-            depotReturnVariance: dateDiffInDays(parseDate(row[indices.estimatedDepotDate]), actualDepotReturnDate),
+            depotReturnVariance: dateDiffInDays(estimatedDepotDate, actualDepotReturnDate),
             detentionRisk: demurrageDays, 
             portToCargoReady: dateDiffInDays(ataDate, cargoReadyDate),
             madeRomaneio,
             status,
             statusComex,
             generalWarehouse,
-        } as Shipment | null;
-    }).filter((s): s is Shipment => s !== null);
+        });
+    }
 
     return { 
         shipments, 
@@ -404,7 +453,6 @@ export const processRawData = (data: any[][]): { shipments: Shipment[], carriers
         generalWarehouseList: [...generalWarehouseSet].sort()
     };
 };
-
 
 export const calculatePortYardOperationData = (shipments: Shipment[]): PortYardDashboardData => {
   const now = new Date();
@@ -433,16 +481,17 @@ export const calculatePortYardOperationData = (shipments: Shipment[]): PortYardD
   const dailyMap: Record<string, { TEGMA: number, GABARDO: number, BRAZUL: number, TRANSILVA: number, Total: number }> = {};
   const modelTotals: Record<string, number> = {};
 
-  const getDaysBetween = (start: Date | null, end: Date | null) => start && end ? Math.floor((end.getTime() - start.getTime()) / (1000 * 3600 * 24)) : 0;
+  const getDaysBetween = (start: Date | null, end: Date | null) => (start && end && isValidDate(start) && isValidDate(end)) ? Math.floor((end.getTime() - start.getTime()) / (1000 * 3600 * 24)) : 0;
 
   shipments.forEach(s => {
+    if(!s) return;
     if(s.ata) received++;
     if(s.dateNF) released++;
     if(s.actualDepotReturnDate) emptyReturned++;
     if(s.channelDate) cleared++;
     if(s.unloadDate) yardTransfers++;
     
-    const statusUpper = `${s.status} ${s.statusComex}`.toUpperCase();
+    const statusUpper = `${s.status || ''} ${s.statusComex || ''}`.toUpperCase();
     if(statusUpper.includes('WAIT') || statusUpper.includes('AG -')) trucksWaiting++;
 
     const isExport = s.voyage && s.voyage.toUpperCase().includes('OUT');
@@ -491,7 +540,7 @@ export const calculatePortYardOperationData = (shipments: Shipment[]): PortYardD
     else transportType['Outsourced']++;
 
     const actionDate = s.deliveryByd || s.ata;
-    if (actionDate) {
+    if (actionDate && isValidDate(actionDate)) {
       const label = `${actionDate.getMonth()+1}/${actionDate.getDate()}`;
       if (!dailyMap[label]) dailyMap[label] = { TEGMA: 0, GABARDO: 0, BRAZUL: 0, TRANSILVA: 0, Total: 0 };
       if (s.bondedWarehouse?.toUpperCase().includes('TEGMA')) dailyMap[label].TEGMA++;
@@ -542,7 +591,7 @@ export const calculatePortYardOperationData = (shipments: Shipment[]): PortYardD
     ],
     dailyTrendData: Object.keys(dailyMap).map(k => {
       const parts = k.split('/');
-      return { name: k, month: parseInt(parts[0]), day: parseInt(parts[1]), ...dailyMap[k] };
+      return { name: k, month: parseInt(parts[0], 10), day: parseInt(parts[1], 10), ...dailyMap[k] };
     }).sort((a, b) => b.month !== a.month ? a.month - b.month : a.day - b.day).slice(-15),
     modelTotals: modelTotals
   };
@@ -576,16 +625,15 @@ export const generateMarineFluxMatrix = (shipments: Shipment[]) => {
         columns.forEach(col => row[col] = 0);
 
         shipments.forEach(s => {
+            if (!s) return;
             const bw = (s.bondedWarehouse || '').toUpperCase();
             const gw = (s.generalWarehouse || '').toUpperCase();
             
-            // Priority check: bonded warehouse usually defines the primary location
             const matches = loc.match.some(m => bw.includes(m) || gw.includes(m));
 
             if (matches) {
                 const status = (s.statusComex || s.status || '').toUpperCase();
                 
-                // Determine status column logically (hierarchical priority)
                 if (s.deliveryByd) {
                     row['CARGO DELIVERED']++;
                 } else if (s.cargoReadyDate) {
@@ -608,7 +656,6 @@ export const generateMarineFluxMatrix = (shipments: Shipment[]) => {
         return row;
     });
 
-    // Generate CSV
     const header = ['Section', 'Name', ...columns];
     const csvContent = [
         header.join(','),
@@ -619,26 +666,25 @@ export const generateMarineFluxMatrix = (shipments: Shipment[]) => {
 };
 
 export const calculateDashboardData = (shipments: Shipment[]): { kpis: KpiData, charts: ChartData } => {
-    const totalShipments = shipments.length;
-    const deliveredShipments = shipments.filter(s => s.deliveryByd !== null);
+    const totalShipments = Array.isArray(shipments) ? shipments.length : 0;
+    const deliveredShipments = shipments.filter(s => s && s.deliveryByd !== null);
     
-    const clientDeliveryVariances = shipments.map(s => s.clientDeliveryVariance).filter((d): d is number => d !== null);
-    const onTimeTotal = shipments.filter(s => s.estimatedDelivery && s.deliveryByd).length;
+    const clientDeliveryVariances = shipments.map(s => s ? s.clientDeliveryVariance : null).filter((d): d is number => d !== null && !isNaN(d));
+    const onTimeTotal = shipments.filter(s => s && s.estimatedDelivery && s.deliveryByd).length;
     const onTimeCount = clientDeliveryVariances.filter(d => d <= 0).length;
     const onTimePercentage = onTimeTotal ? ((onTimeCount / onTimeTotal) * 100).toFixed(1) : '0.0';
     
-    const totalDemurrage = shipments.reduce((sum, s) => sum + s.demurrageCost, 0);
-    const demurrageShipmentsCount = shipments.filter(s => s.demurrageCost > 0).length;
-    const detentionRiskShipments = shipments.filter(s => s.detentionRisk !== null && s.detentionRisk > 0);
-    const pendingRomaneioCount = shipments.filter(s => !s.madeRomaneio || s.madeRomaneio === 'NO' || s.madeRomaneio === '0').length;
+    const totalDemurrage = shipments.reduce((sum, s) => sum + (s ? (s.demurrageCost || 0) : 0), 0);
+    const demurrageShipmentsCount = shipments.filter(s => s && s.demurrageCost > 0).length;
+    const detentionRiskShipments = shipments.filter(s => s && s.detentionRisk !== null && s.detentionRisk > 0);
+    const pendingRomaneioCount = shipments.filter(s => s && (!s.madeRomaneio || s.madeRomaneio === 'NO' || s.madeRomaneio === '0')).length;
 
     const todayUTC = toUTC(new Date());
     const flaggedContainersCount = shipments.filter(s => {
-        if (s.actualDepotReturnDate || !s.freeTimeDate) return false;
+        if (!s || s.actualDepotReturnDate || !s.freeTimeDate || !isValidDate(s.freeTimeDate)) return false;
         const freeTimeUTC = toUTC(s.freeTimeDate);
         const diffTime = freeTimeUTC.getTime() - todayUTC.getTime();
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        // Flagged if free time is within 15 days and not yet in demurrage
         return diffDays >= 0 && diffDays <= 15;
     }).length;
     
@@ -655,7 +701,7 @@ export const calculateDashboardData = (shipments: Shipment[]): { kpis: KpiData, 
         warehousePicked: Record<string, number>;
         generalWarehousePicked: Record<string, number>;
     }> = shipments.reduce((acc, s) => {
-        if (s.deliveryByd) {
+        if (s && s.deliveryByd && isValidDate(s.deliveryByd)) {
             const dateObj = new Date(s.deliveryByd);
             dateObj.setHours(0,0,0,0);
             const dayKey = dateObj.toISOString().split('T')[0];
@@ -697,7 +743,7 @@ export const calculateDashboardData = (shipments: Shipment[]): { kpis: KpiData, 
     }, {} as Record<string, any>);
 
     const dailyDepotData: Record<string, { date: Date; label: string; total: number; depots: Record<string, number> }> = shipments.reduce((acc, s) => {
-        if (s.actualDepotReturnDate) {
+        if (s && s.actualDepotReturnDate && isValidDate(s.actualDepotReturnDate)) {
             const dateObj = new Date(s.actualDepotReturnDate);
             dateObj.setHours(0,0,0,0);
             const dayKey = dateObj.toISOString().split('T')[0];
@@ -718,8 +764,9 @@ export const calculateDashboardData = (shipments: Shipment[]): { kpis: KpiData, 
     }, {} as Record<string, any>);
 
     const pipelineDataMap: Record<string, PipelineWeek> = shipments.reduce((acc, s) => {
+        if (!s) return acc;
         const date = s.ata || s.estimatedDelivery;
-        if (date) {
+        if (date && isValidDate(date)) {
             const { week, year } = getISOWeek(date);
             const key = `W${week} - ${year}`;
             
@@ -789,9 +836,9 @@ export const calculateDashboardData = (shipments: Shipment[]): { kpis: KpiData, 
     const daysGoalNotAchieved = totalWeekdaysOperated - daysGoalAchieved;
     const goalAchievementPct = totalWeekdaysOperated > 0 ? ((daysGoalAchieved / totalWeekdaysOperated) * 100).toFixed(1) : '0.0';
     const avgWeekdayVolume = totalWeekdaysOperated > 0 ? (totalWeekdayVolume / totalWeekdaysOperated).toFixed(1) : '0.0';
-    const avgDrainRate = parseFloat(avgWeekdayVolume) || 1; // Fallback to 1 to avoid division by zero
+    const avgDrainRate = parseFloat(avgWeekdayVolume) || 1;
 
-    const backlog = shipments.filter(s => !s.deliveryByd).sort((a, b) => {
+    const backlog = shipments.filter(s => s && !s.deliveryByd).sort((a, b) => {
         const dateA = a.cargoReadyDate || a.ata || new Date(0);
         const dateB = b.cargoReadyDate || b.ata || new Date(0);
         return dateA.getTime() - dateB.getTime();
@@ -799,7 +846,7 @@ export const calculateDashboardData = (shipments: Shipment[]): { kpis: KpiData, 
 
     const projectedBacklog = backlog.filter((s, index) => {
         const startDate = s.cargoReadyDate || s.ata;
-        if (!startDate) return false;
+        if (!startDate || !isValidDate(startDate)) return false;
         const daysAlreadyInBacklog = (todayUTC.getTime() - toUTC(startDate).getTime()) / (1000 * 60 * 60 * 24);
         const estimatedDaysToDrain = index / avgDrainRate;
         return (daysAlreadyInBacklog + estimatedDaysToDrain) > 10;
@@ -808,7 +855,7 @@ export const calculateDashboardData = (shipments: Shipment[]): { kpis: KpiData, 
     const projectedDaysMap: Record<string, number> = {};
     projectedBacklog.forEach((s, index) => {
         const startDate = s.cargoReadyDate || s.ata;
-        if (!startDate) return;
+        if (!startDate || !isValidDate(startDate)) return;
         const daysAlreadyInBacklog = (todayUTC.getTime() - toUTC(startDate).getTime()) / (1000 * 60 * 60 * 24);
         const estimatedDaysToDrain = index / avgDrainRate;
         projectedDaysMap[s.containerNumber] = Math.ceil(daysAlreadyInBacklog + estimatedDaysToDrain);
@@ -828,7 +875,8 @@ export const calculateDashboardData = (shipments: Shipment[]): { kpis: KpiData, 
     let bondedDwellMax = 0;
 
     shipments.forEach((s) => {
-        const status = (s.status || '').toUpperCase(); // Assuming status exists, or use a fallback
+        if (!s) return;
+        const status = (s.status || '').toUpperCase();
         const term = (s.bondedWarehouse || '').toUpperCase();
 
         if (status.includes("MAR") || status.includes("TRANSIT")) inTransit++;
@@ -839,7 +887,7 @@ export const calculateDashboardData = (shipments: Shipment[]): { kpis: KpiData, 
 
         const eta = s.ata || s.estimatedDelivery;
         const ft = s.freeTimeDate;
-        if (ft && !s.actualDepotReturnDate) {
+        if (ft && isValidDate(ft) && !s.actualDepotReturnDate) {
             const d = Math.ceil((ft.getTime() - todayUTC.getTime()) / 86400000);
             if (d <= 7) ftRisk7d++;
             if (d <= 3) ftRisk3d++;
@@ -848,7 +896,7 @@ export const calculateDashboardData = (shipments: Shipment[]): { kpis: KpiData, 
         if (isBonded) {
             const cleared = s.channelDate || s.dateNF;
             const dwellStart = cleared || eta;
-            if (dwellStart) {
+            if (dwellStart && isValidDate(dwellStart)) {
                 const dwell = Math.max(0, Math.floor((todayUTC.getTime() - dwellStart.getTime()) / 86400000));
                 bondedDwellSum += dwell;
                 bondedDwellCount += 1;
@@ -911,7 +959,7 @@ export const calculateDashboardData = (shipments: Shipment[]): { kpis: KpiData, 
     const dailyDepotReturnBreakdown = Object.values(dailyDepotData).sort((a,b) => a.date.getTime() - b.date.getTime()).map(day => ({ date: day.date, label: day.label, total: day.total, ...day.depots }));
 
     const monthlyTrendMap: Record<number, { name: string; value: number; late: number; sortKey: number; date: Date }> = shipments.reduce((acc, s) => {
-        if (s.deliveryByd) {
+        if (s && s.deliveryByd && isValidDate(s.deliveryByd)) {
             const d = new Date(s.deliveryByd);
             const monthIdx = d.getMonth();
             const year = d.getFullYear();
@@ -927,8 +975,9 @@ export const calculateDashboardData = (shipments: Shipment[]): { kpis: KpiData, 
     const monthlyTrend = (Object.values(monthlyTrendMap) as any[]).sort((a, b) => a.sortKey - b.sortKey);
 
     const monthlyStatusMap: Record<number, { name: string; delivered: number; pending: number; total: number; sortKey: number }> = shipments.reduce((acc, s) => {
+        if (!s) return acc;
         const date = s.deliveryByd || s.ata;
-        if (!date) return acc;
+        if (!date || !isValidDate(date)) return acc;
         const monthIdx = date.getMonth();
         const year = date.getFullYear();
         const sortKey = year * 100 + monthIdx;
@@ -944,6 +993,7 @@ export const calculateDashboardData = (shipments: Shipment[]): { kpis: KpiData, 
     const aggregateBy = <T>(key: keyof Shipment, valueCalc: (s: Shipment) => T | null, aggregator: (values: T[]) => number) => {
         const grouped: Record<string, T[]> = {};
         shipments.forEach(s => {
+            if (!s) return;
             const groupKey = String(s[key] || 'Unknown');
             const value = valueCalc(s);
             if(groupKey && value !== null){
@@ -966,7 +1016,11 @@ export const calculateDashboardData = (shipments: Shipment[]): { kpis: KpiData, 
         dailyDepotReturnBreakdown,
         monthlyStatus,
         monthlyTrend,
-        dailyVolumeStats: { avg: avg(leadTimeTrend.map(d => d.containerCount)), min: Math.min(...leadTimeTrend.map(d => d.containerCount)), max: Math.max(...leadTimeTrend.map(d => d.containerCount)) },
+        dailyVolumeStats: { 
+            avg: avg(leadTimeTrend.map(d => d.containerCount)), 
+            min: leadTimeTrend.length > 0 ? Math.min(...leadTimeTrend.map(d => d.containerCount)) : 0, 
+            max: leadTimeTrend.length > 0 ? Math.max(...leadTimeTrend.map(d => d.containerCount)) : 0 
+        },
         cycleTime: [
             { name: 'Port to Customs', value: parseFloat(avg(shipments.map(s => s.portToCustomsTime).filter((d): d is number => d !== null && d >= 0)).toFixed(1)) },
             { name: 'Customs Process', value: parseFloat(avg(shipments.map(s => s.customsProcessTime).filter((d): d is number => d !== null && d >= 0)).toFixed(1)) },
@@ -974,6 +1028,7 @@ export const calculateDashboardData = (shipments: Shipment[]): { kpis: KpiData, 
         ],
         carrierPerformance: aggregateBy('carrier', s => s.transportDeliveryTime, vals => avg(vals as number[])).map(d => ({name: d.name, avgTime: d.value})).sort((a, b) => a.avgTime - b.avgTime),
         carrierDelayImpact: Object.entries(shipments.reduce((acc, s) => {
+            if (!s) return acc;
             const c = s.carrier || 'Unknown';
             if (!acc[c]) acc[c] = { total: 0, late: 0 };
             acc[c].total++;
@@ -983,8 +1038,8 @@ export const calculateDashboardData = (shipments: Shipment[]): { kpis: KpiData, 
             name,
             volume: stats.total,
             lateCount: stats.late,
-            latePct: parseFloat(((stats.late / stats.total) * 100).toFixed(1)),
-            volumePct: parseFloat(((stats.total / totalShipments) * 100).toFixed(1))
+            latePct: stats.total > 0 ? parseFloat(((stats.late / stats.total) * 100).toFixed(1)) : 0,
+            volumePct: totalShipments > 0 ? parseFloat(((stats.total / totalShipments) * 100).toFixed(1)) : 0
         })).sort((a, b) => b.volume - a.volume),
         depotDistribution,
         customsChannel: aggregateBy('parametrization', () => 1, vals => vals.length),
@@ -1000,17 +1055,17 @@ export const calculateDashboardData = (shipments: Shipment[]): { kpis: KpiData, 
             name: d.name, 
             value: d.value, 
             capacity: WAREHOUSE_CAPACITIES[d.name] || 0,
-            arrived: shipments.filter(s => s.bondedWarehouse === d.name && s.estimatedDelivery).length
+            arrived: shipments.filter(s => s && s.bondedWarehouse === d.name && s.estimatedDelivery).length
         })).sort((a, b) => b.value - a.value),
         unloadedByWarehouse: aggregateBy('bondedWarehouse', s => s.unloadDate ? 1 : null, vals => vals.length).map(d => ({ name: d.name, value: d.value, capacity: WAREHOUSE_CAPACITIES[d.name] || 0 })).sort((a, b) => b.value - a.value),
         bondedFlow: aggregateBy('bondedWarehouse', s => (s.ata ? 1 : null), vals => vals.length).map(d => ({
             name: d.name,
             placed: d.value,
-            picked: shipments.filter(s => s.bondedWarehouse === d.name && s.deliveryByd).length,
-            arrived: shipments.filter(s => s.bondedWarehouse === d.name && s.estimatedDelivery).length
+            picked: shipments.filter(s => s && s.bondedWarehouse === d.name && s.deliveryByd).length,
+            arrived: shipments.filter(s => s && s.bondedWarehouse === d.name && s.estimatedDelivery).length
         })).sort((a, b) => b.placed - a.placed),
         bondedInventory: Object.entries(shipments.reduce((acc, s) => {
-            if (s.ata && !s.deliveryByd) {
+            if (s && s.ata && isValidDate(s.ata) && !s.deliveryByd) {
                 const warehouse = s.bondedWarehouse || 'Unknown';
                 if (!acc[warehouse]) acc[warehouse] = { arrivedNotPicked: 0, futureArrivals: 0 };
                 
@@ -1029,6 +1084,7 @@ export const calculateDashboardData = (shipments: Shipment[]): { kpis: KpiData, 
             total: counts.arrivedNotPicked + counts.futureArrivals
         })).sort((a, b) => b.total - a.total),
         romaneioDistribution: Object.entries(shipments.reduce((acc, s) => {
+            if (!s) return acc;
             const status = s.madeRomaneio || 'PENDING';
             acc[status] = (acc[status] || 0) + 1;
             return acc;
@@ -1042,6 +1098,7 @@ export const calculateDashboardData = (shipments: Shipment[]): { kpis: KpiData, 
     // Calculate PQR Analysis
     const pqrMap: Record<string, { count: number; totalLeadTime: number; leadTimeCount: number; totalCost: number }> = {};
     shipments.forEach(s => {
+        if (!s) return;
         const model = s.cargoModel || 'Other';
         if (!pqrMap[model]) {
             pqrMap[model] = { count: 0, totalLeadTime: 0, leadTimeCount: 0, totalCost: 0 };
@@ -1057,7 +1114,7 @@ export const calculateDashboardData = (shipments: Shipment[]): { kpis: KpiData, 
     const pqrList = Object.entries(pqrMap).map(([name, stats]) => ({
         name,
         value: stats.count,
-        percentage: (stats.count / totalShipments) * 100,
+        percentage: totalShipments > 0 ? (stats.count / totalShipments) * 100 : 0,
         avgLeadTime: stats.leadTimeCount > 0 ? stats.totalLeadTime / stats.leadTimeCount : null,
         totalCost: stats.totalCost
     })).sort((a, b) => b.value - a.value);
@@ -1077,8 +1134,8 @@ export const calculateDashboardData = (shipments: Shipment[]): { kpis: KpiData, 
         };
     }) as any;
 
-    // Calculate XYZ Analysis (Cost/Value based)
-    const totalPortfolioCost = shipments.reduce((sum, s) => sum + (s.totalCost || 0), 0);
+    // Calculate XYZ Analysis
+    const totalPortfolioCost = shipments.reduce((sum, s) => sum + (s ? (s.totalCost || 0) : 0), 0);
     const xyzList = Object.entries(pqrMap).map(([name, stats]) => ({
         name,
         value: stats.count,
@@ -1106,9 +1163,10 @@ export const calculateDashboardData = (shipments: Shipment[]): { kpis: KpiData, 
     const cargoReadyMap: Record<string, { date: Date; label: string; readyCount: number; deliveredCount: number; ataCount: number; readyBLs: Set<string>; deliveredBLs: Set<string>; ataBLs: Set<string>; isWeekend: boolean }> = {};
 
     shipments.forEach(s => {
+        if (!s) return;
         const bl = s.billOfLading || 'Unknown';
-        // Process Cargo Ready Dates
-        if (s.cargoReadyDate) {
+        
+        if (s.cargoReadyDate && isValidDate(s.cargoReadyDate)) {
             const dateObj = new Date(s.cargoReadyDate);
             dateObj.setHours(0,0,0,0);
             const dayKey = dateObj.toISOString().split('T')[0];
@@ -1125,8 +1183,7 @@ export const calculateDashboardData = (shipments: Shipment[]): { kpis: KpiData, 
             cargoReadyMap[dayKey].readyBLs.add(bl);
         }
 
-        // Process Delivery Dates for the same comparison
-        if (s.deliveryByd) {
+        if (s.deliveryByd && isValidDate(s.deliveryByd)) {
             const dateObj = new Date(s.deliveryByd);
             dateObj.setHours(0,0,0,0);
             const dayKey = dateObj.toISOString().split('T')[0];
@@ -1143,8 +1200,7 @@ export const calculateDashboardData = (shipments: Shipment[]): { kpis: KpiData, 
             cargoReadyMap[dayKey].deliveredBLs.add(bl);
         }
 
-        // Process ATA Dates for the same comparison
-        if (s.ata) {
+        if (s.ata && isValidDate(s.ata)) {
             const dateObj = new Date(s.ata);
             dateObj.setHours(0,0,0,0);
             const dayKey = dateObj.toISOString().split('T')[0];
@@ -1188,8 +1244,9 @@ export const calculateDashboardData = (shipments: Shipment[]): { kpis: KpiData, 
     const rampUpMap: Record<string, { period: string; actualArrivals: number; projectedArrivals: number; sortKey: number }> = {};
 
     shipments.forEach(s => {
+        if (!s) return;
         const date = s.ata || s.estimatedDelivery;
-        if (date) {
+        if (date && isValidDate(date)) {
             const { week, year } = getISOWeek(date);
             const key = `W${week} - ${year}`;
             
@@ -1234,9 +1291,10 @@ export const calculateVesselMatrix = (shipments: Shipment[]): import('../types')
     };
 
     shipments.forEach(s => {
+        if (!s) return;
         const vessel = s.vesselName && s.vesselName.trim() !== '' ? s.vesselName.trim().toUpperCase() : "UNKNOWN VESSEL";
         const etaDate = s.ata || s.estimatedDelivery;
-        const etaStr = etaDate && !isNaN(etaDate.getTime()) ? etaDate.toISOString().split('T')[0] : 'UNKNOWN_ETA';
+        const etaStr = etaDate && isValidDate(etaDate) ? etaDate.toISOString().split('T')[0] : 'UNKNOWN_ETA';
         const groupKey = `${vessel}_${etaStr}`;
 
         if (!matrixMap.has(groupKey)) {
@@ -1276,8 +1334,8 @@ export const calculateVesselMatrix = (shipments: Shipment[]): import('../types')
     });
 
     const rows = Array.from(matrixMap.values()).sort((a, b) => {
-        const aTime = a.eta ? a.eta.getTime() : 0;
-        const bTime = b.eta ? b.eta.getTime() : 0;
+        const aTime = a.eta && isValidDate(a.eta) ? a.eta.getTime() : 0;
+        const bTime = b.eta && isValidDate(b.eta) ? b.eta.getTime() : 0;
         if (aTime !== bTime) {
             return aTime - bTime;
         }
@@ -1289,7 +1347,7 @@ export const calculateVesselMatrix = (shipments: Shipment[]): import('../types')
         "AT THE PORT",
         "CARGO PRESENCE",
         "REGISTERED IMPORT DECLARATION",
-        "IMPORT DECLARATION", // fallback
+        "IMPORT DECLARATION",
         "CARGO CLEARED",
         "CARGO READY",
         "CARGO DELIVERED"

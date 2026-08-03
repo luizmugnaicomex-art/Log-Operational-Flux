@@ -33,7 +33,14 @@ export const EmptyContainersPanel: React.FC<EmptyContainersPanelProps> = ({ isMi
         const stored = localStorage.getItem('emptyContainersDataV3');
         if (stored) {
             try {
-                setData(JSON.parse(stored));
+                const parsed = JSON.parse(stored);
+                if (parsed && typeof parsed === 'object') {
+                    setData({
+                        bondedArea: Array.isArray(parsed.bondedArea) ? parsed.bondedArea : [],
+                        warehouse: Array.isArray(parsed.warehouse) ? parsed.warehouse : [],
+                        buffer: Array.isArray(parsed.buffer) ? parsed.buffer : [],
+                    });
+                }
             } catch (e) {
                 console.error("Failed to parse stored containers data", e);
             }
@@ -49,7 +56,7 @@ export const EmptyContainersPanel: React.FC<EmptyContainersPanelProps> = ({ isMi
         if (!newName.trim()) return;
         setData(prev => ({
             ...prev,
-            [sectionId]: [...prev[sectionId], { id: Date.now().toString() + Math.random().toString(), name: newName.trim(), emptyCount: 0, fullCount: 0 }]
+            [sectionId]: [...(prev[sectionId] || []), { id: Date.now().toString() + Math.random().toString(), name: newName.trim(), emptyCount: 0, fullCount: 0 }]
         }));
         setNewName("");
         setAddingTo(null);
@@ -58,17 +65,17 @@ export const EmptyContainersPanel: React.FC<EmptyContainersPanelProps> = ({ isMi
     const handleRemove = (sectionId: keyof StorageData, locationId: string) => {
         setData(prev => ({
             ...prev,
-            [sectionId]: prev[sectionId].filter(loc => loc.id !== locationId)
+            [sectionId]: (prev[sectionId] || []).filter(loc => loc.id !== locationId)
         }));
     };
 
     const handleUpdate = (sectionId: keyof StorageData, locationId: string, type: 'empty' | 'full', delta: number) => {
         setData(prev => ({
             ...prev,
-            [sectionId]: prev[sectionId].map(loc => 
+            [sectionId]: (prev[sectionId] || []).map(loc => 
                 loc.id === locationId ? { 
                     ...loc, 
-                    [type === 'empty' ? 'emptyCount' : 'fullCount']: Math.max(0, loc[type === 'empty' ? 'emptyCount' : 'fullCount'] + delta) 
+                    [type === 'empty' ? 'emptyCount' : 'fullCount']: Math.max(0, (loc[type === 'empty' ? 'emptyCount' : 'fullCount'] || 0) + delta) 
                 } : loc
             )
         }));
@@ -81,7 +88,7 @@ export const EmptyContainersPanel: React.FC<EmptyContainersPanelProps> = ({ isMi
         if (newCount !== null) {
             setData(prev => ({
                 ...prev,
-                [sectionId]: prev[sectionId].map(loc => 
+                [sectionId]: (prev[sectionId] || []).map(loc => 
                     loc.id === locationId ? { 
                         ...loc, 
                         [type === 'empty' ? 'emptyCount' : 'fullCount']: newCount 
@@ -91,14 +98,14 @@ export const EmptyContainersPanel: React.FC<EmptyContainersPanelProps> = ({ isMi
         }
     };
 
-    const sections: { id: keyof StorageData; label: string; icon: string; color: string }[] = [
-        { id: 'bondedArea', label: 'Bonded Area', icon: 'account_balance', color: 'amber' },
-        { id: 'warehouse', label: 'Warehouse', icon: 'corporate_fare', color: 'indigo' },
-        { id: 'buffer', label: 'Buffer', icon: 'layers', color: 'emerald' },
+    const sections: { id: keyof StorageData; label: string; icon: string; bgClass: string; textClass: string }[] = [
+        { id: 'bondedArea', label: 'Bonded Area', icon: 'account_balance', bgClass: 'bg-amber-50', textClass: 'text-amber-500' },
+        { id: 'warehouse', label: 'Warehouse', icon: 'corporate_fare', bgClass: 'bg-indigo-50', textClass: 'text-indigo-500' },
+        { id: 'buffer', label: 'Buffer', icon: 'layers', bgClass: 'bg-emerald-50', textClass: 'text-emerald-500' },
     ];
 
-    const totalEmptyUnits = (Object.values(data) as LocationCount[][]).reduce((acc, list) => acc + list.reduce((sum, item) => sum + item.emptyCount, 0), 0);
-    const totalFullUnits = (Object.values(data) as LocationCount[][]).reduce((acc, list) => acc + list.reduce((sum, item) => sum + item.fullCount, 0), 0);
+    const totalEmptyUnits = (Object.values(data || {}) as LocationCount[][]).reduce((acc, list) => acc + (Array.isArray(list) ? list.reduce((sum, item) => sum + (item.emptyCount || 0), 0) : 0), 0);
+    const totalFullUnits = (Object.values(data || {}) as LocationCount[][]).reduce((acc, list) => acc + (Array.isArray(list) ? list.reduce((sum, item) => sum + (item.fullCount || 0), 0) : 0), 0);
 
     if (isMinimized) {
         return (
@@ -144,7 +151,7 @@ export const EmptyContainersPanel: React.FC<EmptyContainersPanelProps> = ({ isMi
                         <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none">Manual Control</p>
                     </div>
                 </div>
-                <button onClick={onToggleMinimize} className="w-8 h-8 rounded-full bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-800 hover:bg-slate-100 transition-colors shadow-sm">
+                <button onClick={onToggleMinimize} className="w-8 h-8 rounded-full bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-800 hover:bg-slate-100 transition-colors shadow-sm cursor-pointer">
                     <span className="material-icons text-lg">chevron_right</span>
                 </button>
             </div>
@@ -153,15 +160,15 @@ export const EmptyContainersPanel: React.FC<EmptyContainersPanelProps> = ({ isMi
                 {sections.map(section => (
                     <div key={section.id} className="bg-white p-5 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col gap-4">
                         <div className="flex items-center gap-3">
-                            <div className={`w-8 h-8 rounded-xl flex items-center justify-center bg-${section.color}-50`}>
-                                <span className={`material-icons text-base text-${section.color}-500`}>{section.icon}</span>
+                            <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${section.bgClass}`}>
+                                <span className={`material-icons text-base ${section.textClass}`}>{section.icon}</span>
                             </div>
                             <h3 className="text-xs font-black text-slate-700 uppercase tracking-widest">{section.label}</h3>
                         </div>
                         
                         <div className="space-y-3">
                             <AnimatePresence>
-                                {data[section.id].map(loc => (
+                                {(data[section.id] || []).map(loc => (
                                     <motion.div 
                                         key={loc.id} 
                                         initial={{ opacity: 0, height: 0, scale: 0.95 }}
@@ -171,7 +178,7 @@ export const EmptyContainersPanel: React.FC<EmptyContainersPanelProps> = ({ isMi
                                     >
                                         <div className="flex items-center justify-between border-b border-slate-200/50 pb-2">
                                              <div className="text-xs font-black uppercase text-slate-700 truncate pr-6" title={loc.name}>{loc.name}</div>
-                                             <button onClick={() => handleRemove(section.id, loc.id)} className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-red-500 w-6 h-6 flex items-center justify-center rounded-full hover:bg-red-50 bg-white shadow-sm border border-slate-200">
+                                             <button onClick={() => handleRemove(section.id, loc.id)} className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-red-500 w-6 h-6 flex items-center justify-center rounded-full hover:bg-red-50 bg-white shadow-sm border border-slate-200 cursor-pointer">
                                                  <span className="material-icons text-[14px]">close</span>
                                              </button>
                                         </div>
@@ -179,11 +186,11 @@ export const EmptyContainersPanel: React.FC<EmptyContainersPanelProps> = ({ isMi
                                         <div className="flex items-center justify-between gap-3 bg-white p-2 rounded-xl border border-slate-100">
                                             <div className="text-[9px] font-black uppercase text-slate-400 tracking-widest w-12 text-center">Empty</div>
                                             <div className="flex items-center gap-2">
-                                                <button onClick={() => handleUpdate(section.id, loc.id, 'empty', -1)} className="w-8 h-8 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-500 hover:text-red-500 hover:border-red-200 shadow-sm transition-colors">
+                                                <button onClick={() => handleUpdate(section.id, loc.id, 'empty', -1)} className="w-8 h-8 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-500 hover:text-red-500 hover:border-red-200 shadow-sm transition-colors cursor-pointer">
                                                     <span className="material-icons text-lg">remove</span>
                                                 </button>
                                                 <input type="number" value={loc.emptyCount === 0 ? '' : loc.emptyCount} placeholder="0" onChange={(e) => handleManualChange(section.id, loc.id, 'empty', e.target.value)} className="w-12 text-center font-display font-bold text-lg text-slate-800 bg-transparent border-none focus:outline-none focus:ring-0 p-0 hide-arrows" />
-                                                <button onClick={() => handleUpdate(section.id, loc.id, 'empty', 1)} className="w-8 h-8 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-500 hover:text-emerald-500 hover:border-emerald-200 shadow-sm transition-colors">
+                                                <button onClick={() => handleUpdate(section.id, loc.id, 'empty', 1)} className="w-8 h-8 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-500 hover:text-emerald-500 hover:border-emerald-200 shadow-sm transition-colors cursor-pointer">
                                                     <span className="material-icons text-lg">add</span>
                                                 </button>
                                             </div>
@@ -192,11 +199,11 @@ export const EmptyContainersPanel: React.FC<EmptyContainersPanelProps> = ({ isMi
                                         <div className="flex items-center justify-between gap-3 bg-white p-2 rounded-xl border border-slate-100">
                                             <div className="text-[9px] font-black uppercase text-indigo-400 tracking-widest w-12 text-center">Full</div>
                                             <div className="flex items-center gap-2">
-                                                <button onClick={() => handleUpdate(section.id, loc.id, 'full', -1)} className="w-8 h-8 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-500 hover:text-red-500 hover:border-red-200 shadow-sm transition-colors">
+                                                <button onClick={() => handleUpdate(section.id, loc.id, 'full', -1)} className="w-8 h-8 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-500 hover:text-red-500 hover:border-red-200 shadow-sm transition-colors cursor-pointer">
                                                     <span className="material-icons text-lg">remove</span>
                                                 </button>
                                                 <input type="number" value={loc.fullCount === 0 ? '' : loc.fullCount} placeholder="0" onChange={(e) => handleManualChange(section.id, loc.id, 'full', e.target.value)} className="w-12 text-center font-display font-bold text-lg text-slate-800 bg-transparent border-none focus:outline-none focus:ring-0 p-0 hide-arrows" />
-                                                <button onClick={() => handleUpdate(section.id, loc.id, 'full', 1)} className="w-8 h-8 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-500 hover:text-emerald-500 hover:border-emerald-200 shadow-sm transition-colors">
+                                                <button onClick={() => handleUpdate(section.id, loc.id, 'full', 1)} className="w-8 h-8 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-500 hover:text-emerald-500 hover:border-emerald-200 shadow-sm transition-colors cursor-pointer">
                                                     <span className="material-icons text-lg">add</span>
                                                 </button>
                                             </div>
@@ -223,17 +230,17 @@ export const EmptyContainersPanel: React.FC<EmptyContainersPanelProps> = ({ isMi
                                         }}
                                         className="flex-1 min-w-0 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                                     />
-                                    <button onClick={() => handleAdd(section.id)} className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-md hover:bg-indigo-700 transition-colors shrink-0">
+                                    <button onClick={() => handleAdd(section.id)} className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-md hover:bg-indigo-700 transition-colors shrink-0 cursor-pointer">
                                         <span className="material-icons text-base">check</span>
                                     </button>
-                                    <button onClick={() => setAddingTo(null)} className="w-8 h-8 rounded-xl bg-slate-200 text-slate-600 flex items-center justify-center shadow-sm hover:bg-slate-300 transition-colors shrink-0">
+                                    <button onClick={() => setAddingTo(null)} className="w-8 h-8 rounded-xl bg-slate-200 text-slate-600 flex items-center justify-center shadow-sm hover:bg-slate-300 transition-colors shrink-0 cursor-pointer">
                                         <span className="material-icons text-base">close</span>
                                     </button>
                                 </motion.div>
                             ) : (
                                 <button 
                                     onClick={() => { setAddingTo(section.id); setNewName(""); }}
-                                    className="w-full py-2.5 rounded-xl border border-dashed border-slate-300 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50/50 transition-all flex items-center justify-center gap-2 mt-2"
+                                    className="w-full py-2.5 rounded-xl border border-dashed border-slate-300 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50/50 transition-all flex items-center justify-center gap-2 mt-2 cursor-pointer"
                                 >
                                     <span className="material-icons text-sm">add</span> Add Entry
                                 </button>

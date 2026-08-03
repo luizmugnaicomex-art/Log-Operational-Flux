@@ -1,4 +1,3 @@
-
 import React from 'react';
 
 interface DashboardFiltersProps {
@@ -31,22 +30,22 @@ interface DashboardFiltersProps {
 }
 
 const DashboardFilters: React.FC<DashboardFiltersProps> = ({
-    carriers,
-    analysts,
-    cargos,
-    containerTypes,
-    incoterms,
-    romaneioStatuses,
-    years,
-    selectedCarriers,
-    selectedAnalysts,
-    selectedCargos,
-    selectedContainerTypes,
-    selectedIncoterms,
-    selectedRomaneioStatuses,
-    selectedYear,
-    selectedPeriod,
-    selectedMonth,
+    carriers = [],
+    analysts = [],
+    cargos = [],
+    containerTypes = [],
+    incoterms = [],
+    romaneioStatuses = [],
+    years = [],
+    selectedCarriers = [],
+    selectedAnalysts = [],
+    selectedCargos = [],
+    selectedContainerTypes = [],
+    selectedIncoterms = [],
+    selectedRomaneioStatuses = [],
+    selectedYear = 'all',
+    selectedPeriod = 'all',
+    selectedMonth = 'all',
     onCarrierChange,
     onAnalystChange,
     onCargoChange,
@@ -62,6 +61,7 @@ const DashboardFilters: React.FC<DashboardFiltersProps> = ({
         e: React.ChangeEvent<HTMLSelectElement>,
         setter: (values: string[]) => void
     ) => {
+        if (!e.target.selectedOptions) return;
         const options = Array.from(
             e.target.selectedOptions,
             (option: HTMLOptionElement) => option.value
@@ -87,14 +87,14 @@ const DashboardFilters: React.FC<DashboardFiltersProps> = ({
     const selectBaseClasses =
         'w-full rounded-2xl border border-white/20 shadow-inner text-[11px] font-bold focus:border-indigo-400 focus:ring-8 focus:ring-indigo-500/5 glass-dark text-slate-700 px-4 py-3 outline-none transition-all appearance-none cursor-pointer hover:bg-white/10 group-hover:ring-white/40 ring-1 ring-transparent';
 
-    // Count how many filters are effectively active
+    // Count how many filters are effectively active with null safety
     const activeFiltersCount =
-        (selectedCarriers.length ? 1 : 0) +
-        (selectedAnalysts.length ? 1 : 0) +
-        (selectedCargos.length ? 1 : 0) +
-        (selectedContainerTypes.length ? 1 : 0) +
-        (selectedIncoterms.length ? 1 : 0) +
-        (selectedRomaneioStatuses.length ? 1 : 0) +
+        (Array.isArray(selectedCarriers) && selectedCarriers.length ? 1 : 0) +
+        (Array.isArray(selectedAnalysts) && selectedAnalysts.length ? 1 : 0) +
+        (Array.isArray(selectedCargos) && selectedCargos.length ? 1 : 0) +
+        (Array.isArray(selectedContainerTypes) && selectedContainerTypes.length ? 1 : 0) +
+        (Array.isArray(selectedIncoterms) && selectedIncoterms.length ? 1 : 0) +
+        (Array.isArray(selectedRomaneioStatuses) && selectedRomaneioStatuses.length ? 1 : 0) +
         (selectedYear !== 'all' ? 1 : 0) +
         (selectedPeriod !== 'all' && selectedYear !== 'all' ? 1 : 0) +
         (selectedMonth !== 'all' ? 1 : 0);
@@ -136,7 +136,7 @@ const DashboardFilters: React.FC<DashboardFiltersProps> = ({
 
                     <button
                         onClick={onReset}
-                        className="inline-flex items-center px-8 py-3 glass rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] text-slate-700 hover:bg-white/60 transition-all shadow-lg ring-1 ring-white/60 hover:scale-105 active:scale-95"
+                        className="inline-flex items-center px-8 py-3 glass rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] text-slate-700 hover:bg-white/60 transition-all shadow-lg ring-1 ring-white/60 hover:scale-105 active:scale-95 cursor-pointer"
                     >
                         <span className="material-icons mr-2 text-base">
                             restart_alt
@@ -168,7 +168,7 @@ const DashboardFilters: React.FC<DashboardFiltersProps> = ({
                             className={selectBaseClasses}
                         >
                             <option value="all">Unfiltered View (Global Time)</option>
-                            {years.map(y => (
+                            {(years || []).map(y => (
                                 <option key={y} value={y}>
                                     Fiscal Year {y}
                                 </option>
@@ -242,12 +242,12 @@ const DashboardFilters: React.FC<DashboardFiltersProps> = ({
             {/* Entity filters grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-8">
                 {[
-                    { id: 'carrierFilter', label: 'Carrier Network', list: carriers, selected: selectedCarriers, change: onCarrierChange },
-                    { id: 'analystFilter', label: 'Analyst Group', list: analysts, selected: selectedAnalysts, change: onAnalystChange },
-                    { id: 'cargoFilter', label: 'Commodity Type', list: cargos, selected: selectedCargos, change: onCargoChange },
-                    { id: 'containerTypeFilter', label: 'Equipment Spec', list: containerTypes, selected: selectedContainerTypes, change: onContainerTypeChange },
-                    { id: 'incotermFilter', label: 'Agreement Type', list: incoterms, selected: selectedIncoterms, change: onIncotermChange },
-                    { id: 'romaneioFilter', label: 'Flow Status', list: romaneioStatuses, selected: selectedRomaneioStatuses, change: onRomaneioStatusChange },
+                    { id: 'carrierFilter', label: 'Carrier Network', list: carriers || [], selected: selectedCarriers || [], change: onCarrierChange },
+                    { id: 'analystFilter', label: 'Analyst Group', list: analysts || [], selected: selectedAnalysts || [], change: onAnalystChange },
+                    { id: 'cargoFilter', label: 'Commodity Type', list: cargos || [], selected: selectedCargos || [], change: onCargoChange },
+                    { id: 'containerTypeFilter', label: 'Equipment Spec', list: containerTypes || [], selected: selectedContainerTypes || [], change: onContainerTypeChange },
+                    { id: 'incotermFilter', label: 'Agreement Type', list: incoterms || [], selected: selectedIncoterms || [], change: onIncotermChange },
+                    { id: 'romaneioFilter', label: 'Flow Status', list: romaneioStatuses || [], selected: selectedRomaneioStatuses || [], change: onRomaneioStatusChange },
                 ].map(filter => (
                     <div key={filter.id} className="group/filter">
                         <label
@@ -264,13 +264,13 @@ const DashboardFilters: React.FC<DashboardFiltersProps> = ({
                             className={`${selectBaseClasses} scrollbar-hide py-4 px-2`}
                             style={{ height: '140px' }}
                         >
-                            {filter.list.map(item => (
+                            {(filter.list || []).map(item => (
                                 <option key={item} value={item} className="p-2 px-3 mb-1.5 rounded-xl font-bold checked:bg-indigo-600 checked:text-white hover:bg-white/20 transition-all text-[10px] uppercase tracking-wider">
                                     {item}
                                 </option>
                             ))}
                         </select>
-                        {filter.selected.length > 0 && (
+                        {Array.isArray(filter.selected) && filter.selected.length > 0 && (
                             <div className="mt-4 text-[9px] font-black text-indigo-600 glass px-3 py-1.5 rounded-xl inline-flex items-center gap-2 ring-1 ring-indigo-100 shadow-sm animate-in zoom-in-50">
                                 <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
                                 {filter.selected.length} FILTERED
@@ -283,4 +283,4 @@ const DashboardFilters: React.FC<DashboardFiltersProps> = ({
     );
 };
 
-export default DashboardFilters;
+export default React.memo(DashboardFilters);

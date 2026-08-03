@@ -29,8 +29,10 @@ interface DemurrageControlProps {
   shipments: Shipment[];
 }
 
-export const DemurrageControl: React.FC<{ shipments: Shipment[] }> = ({ shipments }) => {
-  // 1. Dynamic System Reference Date Default: 2026-06-12 (aligns perfectly with comex dates in screenshot)
+const isValidDate = (d: any): d is Date => d instanceof Date && !isNaN(d.getTime());
+
+export const DemurrageControl: React.FC<DemurrageControlProps> = ({ shipments = [] }) => {
+  // 1. Dynamic System Reference Date Default: 2026-06-12
   const [evaluationDate, setEvaluationDate] = useState<string>("2026-06-12");
   
   // 2. Interactive Tariff Rates state per Shipowner (Carrier)
@@ -42,7 +44,7 @@ export const DemurrageControl: React.FC<{ shipments: Shipment[] }> = ({ shipment
     "OTHERS": 110
   });
 
-  // Slider for Projected Delay Days (to estimate future demurrage exposure for high-risk assets)
+  // Slider for Projected Delay Days
   const [projectedDelayFactor, setProjectedDelayFactor] = useState<number>(7);
   
   // Collapsible Rates Panel state
@@ -60,12 +62,12 @@ export const DemurrageControl: React.FC<{ shipments: Shipment[] }> = ({ shipment
       currency: 'USD',
       minimumFractionDigits: 0,
       maximumFractionDigits: 0
-    }).format(value);
+    }).format(value || 0);
   };
 
   // Helper to normalize shipowner name to match our rates state keys
   const getNormalizedCarrier = (shipowner: string): string => {
-    const owner = (shipowner || "").toUpperCase();
+    const owner = String(shipowner || "").toUpperCase();
     if (owner.includes("MSC")) return "MSC";
     if (owner.includes("CMA") || owner.includes("CMA CGM") || owner.includes("ANL")) return "CMA CGM";
     if (owner.includes("ONE") || owner.includes("OCEAN NETWORK")) return "ONE";
@@ -75,7 +77,7 @@ export const DemurrageControl: React.FC<{ shipments: Shipment[] }> = ({ shipment
 
   const todayTime = useMemo(() => {
     const d = new Date(evaluationDate + "T00:00:00Z");
-    return isNaN(d.getTime()) ? new Date("2026-06-12T00:00:00Z").getTime() : d.getTime();
+    return isValidDate(d) ? d.getTime() : new Date("2026-06-12T00:00:00Z").getTime();
   }, [evaluationDate]);
 
   // Redefined aging categories and metrics pipeline
@@ -104,62 +106,58 @@ export const DemurrageControl: React.FC<{ shipments: Shipment[] }> = ({ shipment
     let totalProjectedRisk = 0;
     let historicalDemurragePaid = 0;
 
-    shipments.forEach(s => {
-      const carrierKey = getNormalizedCarrier(s.shipowner || s.carrier || "");
-      const dailyRate = carrierRates[carrierKey] || carrierRates["OTHERS"];
+    if (Array.isArray(shipments)) {
+      shipments.forEach(s => {
+        if (!s) return;
+        const carrierKey = getNormalizedCarrier(s.shipowner || s.carrier || "");
+        const dailyRate = carrierRates[carrierKey] || carrierRates["OTHERS"] || 110;
 
-      // Handle returned containers (completed)
-      if (s.actualDepotReturnDate) {
-        const returnDateObj = new Date(s.actualDepotReturnDate);
-        historicalDemurragePaid += s.demurrageCost || 0;
+        // Handle returned containers (completed)
+        if (s.actualDepotReturnDate && isValidDate(s.actualDepotReturnDate)) {
+          const returnDateObj = new Date(s.actualDepotReturnDate);
+          historicalDemurragePaid += s.demurrageCost || 0;
 
-        if (s.freeTimeDate) {
-          const freeTimeUTC = new Date(s.freeTimeDate);
-          freeTimeUTC.setHours(0, 0, 0, 0);
-          if (returnDateObj.getTime() > freeTimeUTC.getTime()) {
-            lateReturnedCount++;
-          } else {
-            onTimeReturnedCount++;
+          if (s.freeTimeDate && isValidDate(s.freeTimeDate)) {
+            const freeTimeUTC = new Date(s.freeTimeDate);
+            freeTimeUTC.setHours(0, 0, 0, 0);
+            if (returnDateObj.getTime() > freeTimeUTC.getTime()) {
+              lateReturnedCount++;
+            } else {
+              onTimeReturnedCount++;
+            }
           }
+          return;
         }
-        return; // Returned units are removed from active tracking Kanban
-      }
 
-      // Handle active containers with missing date
-      if (!s.freeTimeDate) {
-        if (s.ata) {
-          dateIssue.push(s);
+        // Handle active containers with missing date
+        if (!s.freeTimeDate || !isValidDate(s.freeTimeDate)) {
+          if (s.ata) {
+            dateIssue.push(s);
+          }
+          return;
         }
-        return;
-      }
 
-      // Calculate time remaining/overdue days
-      const freeTimeUTC = new Date(s.freeTimeDate);
-      freeTimeUTC.setHours(0, 0, 0, 0);
-      const diffTime = freeTimeUTC.getTime() - todayTime;
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        // Calculate time remaining/overdue days
+        const freeTimeUTC = new Date(s.freeTimeDate);
+        freeTimeUTC.setHours(0, 0, 0, 0);
+        const diffTime = freeTimeUTC.getTime() - todayTime;
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-      if (diffDays < 0) {
-        // Overdue container
-        demurrage.push(s);
-        // Real-time active demurrage incurred logic: Days Overdue * Active Daily Rate
-        const overdueDays = Math.abs(diffDays);
-        totalAccruedDemurrageActive += overdueDays * dailyRate;
-      } else if (diffDays <= 5) {
-        // High Risk (≤ 5 Days Left)
-        highRisk.push(s);
-        // Predict financial risk logic if return is delayed by projectedDelayFactor (slider configuration)
-        totalProjectedRisk += projectedDelayFactor * dailyRate;
-      } else if (diffDays <= 15) {
-        // Risco Moderado (6 - 15 Days Left)
-        mediumRisk.push(s);
-      } else {
-        // Sob Controle / Safe
-        lowRisk.push(s);
-      }
-    });
+        if (diffDays < 0) {
+          demurrage.push(s);
+          const overdueDays = Math.abs(diffDays);
+          totalAccruedDemurrageActive += overdueDays * dailyRate;
+        } else if (diffDays <= 5) {
+          highRisk.push(s);
+          totalProjectedRisk += projectedDelayFactor * dailyRate;
+        } else if (diffDays <= 15) {
+          mediumRisk.push(s);
+        } else {
+          lowRisk.push(s);
+        }
+      });
+    }
 
-    // Actionable count: units currently sitting in high exposure zones
     const actionableInventoryCount = demurrage.length + highRisk.length + dateIssue.length;
 
     return {
@@ -180,27 +178,32 @@ export const DemurrageControl: React.FC<{ shipments: Shipment[] }> = ({ shipment
   // Extract unique active Terminals / Bonded Warehouses for dropdown filters
   const terminalsList = useMemo(() => {
     const list = new Set<string>();
-    shipments.forEach(s => {
-      const wh = s.bondedWarehouse || s.generalWarehouse;
-      if (wh) {
-        let clean = wh.toUpperCase().trim();
-        if (clean.includes("TECON")) clean = "TECON S.A.";
-        else if (clean.includes("TPC")) clean = "TPC OPERADOR";
-        else if (clean.includes("INTERMARITIMA") || clean.includes("INTER")) clean = "INTERMARITIMA";
-        list.add(clean);
-      }
-    });
+    if (Array.isArray(shipments)) {
+      shipments.forEach(s => {
+        if (!s) return;
+        const wh = s.bondedWarehouse || s.generalWarehouse;
+        if (wh) {
+          let clean = String(wh).toUpperCase().trim();
+          if (clean.includes("TECON")) clean = "TECON S.A.";
+          else if (clean.includes("TPC")) clean = "TPC OPERADOR";
+          else if (clean.includes("INTERMARITIMA") || clean.includes("INTER")) clean = "INTERMARITIMA";
+          list.add(clean);
+        }
+      });
+    }
     return Array.from(list);
   }, [shipments]);
 
   // Check if each s passes search criteria
   const filterShipmentByUI = (s: Shipment): boolean => {
+    if (!s) return false;
+
     // Search filter
     if (searchTerm) {
       const search = searchTerm.toLowerCase();
-      const matchesContainer = (s.containerNumber || "").toLowerCase().includes(search);
-      const matchesVessel = (s.vesselName || "").toLowerCase().includes(search);
-      const matchesBl = (s.billOfLading || "").toLowerCase().includes(search);
+      const matchesContainer = String(s.containerNumber || "").toLowerCase().includes(search);
+      const matchesVessel = String(s.vesselName || "").toLowerCase().includes(search);
+      const matchesBl = String(s.billOfLading || "").toLowerCase().includes(search);
       if (!matchesContainer && !matchesVessel && !matchesBl) return false;
     }
 
@@ -212,7 +215,7 @@ export const DemurrageControl: React.FC<{ shipments: Shipment[] }> = ({ shipment
 
     // Terminal Filter
     if (terminalFilter !== "ALL") {
-      const wh = s.bondedWarehouse || s.generalWarehouse || "";
+      const wh = String(s.bondedWarehouse || s.generalWarehouse || "");
       let cleanWh = wh.toUpperCase().trim();
       if (cleanWh.includes("TECON")) cleanWh = "TECON S.A.";
       else if (cleanWh.includes("TPC")) cleanWh = "TPC OPERADOR";
@@ -226,12 +229,10 @@ export const DemurrageControl: React.FC<{ shipments: Shipment[] }> = ({ shipment
     return true;
   };
 
-  // Roadblock analysis logic per card to provide granular management insight 
   const getRoadblockDetails = (s: Shipment, diffDays: number | null) => {
-    const statusStr = (s.status || s.statusComex || "").toUpperCase();
-    const paramStr = (s.parametrization || "").toUpperCase();
+    const statusStr = String(s.status || s.statusComex || "").toUpperCase();
+    const paramStr = String(s.parametrization || "").toUpperCase();
 
-    // Red alert roadblocks
     if (diffDays !== null && diffDays < 0) {
       if (statusStr.includes("DELIVERED") || statusStr.includes("FACTORY") || statusStr.includes("BYD")) {
         return { label: "Empty Return Pending", color: "bg-red-50 text-red-700 border-red-200" };
@@ -242,7 +243,6 @@ export const DemurrageControl: React.FC<{ shipments: Shipment[] }> = ({ shipment
       return { label: "Priority Empty Return", color: "bg-red-100 text-red-900 border-red-300" };
     }
 
-    // Warnings and other tracking milestones
     if (paramStr.includes("VERMELHO") || paramStr.includes("CINZA")) {
       return { label: "Verificação Física (Canal)", color: "bg-amber-100 text-amber-800 border-amber-300" };
     }
@@ -259,7 +259,6 @@ export const DemurrageControl: React.FC<{ shipments: Shipment[] }> = ({ shipment
     return { label: "Reviewing Documentation", color: "bg-slate-50 text-slate-600 border-slate-200" };
   };
 
-  // Dynamic color formatting helper for days countdowns
   const getCountdownFormat = (diffDays: number | null) => {
     if (diffDays === null) return { text: "Sem Prazo", style: "bg-slate-100 text-slate-700" };
     if (diffDays < 0) return { text: `${Math.abs(diffDays)}d Overdue`, style: "bg-red-50 text-red-650 font-black border border-red-100 animate-pulse" };
@@ -277,7 +276,7 @@ export const DemurrageControl: React.FC<{ shipments: Shipment[] }> = ({ shipment
   };
 
   const handleExportExcel = () => {
-    // Filter active raw shipments matching current search inputs
+    if (!Array.isArray(shipments)) return;
     const exportData = shipments.filter(filterShipmentByUI);
 
     const headers = [
@@ -295,14 +294,13 @@ export const DemurrageControl: React.FC<{ shipments: Shipment[] }> = ({ shipment
     ];
 
     const formatDateValue = (d: any) => {
-      if (!d) return "N/A";
-      const dateObj = new Date(d);
-      return isNaN(dateObj.getTime()) ? "N/A" : dateObj.toLocaleDateString();
+      if (!d || !isValidDate(d)) return "N/A";
+      return d.toLocaleDateString();
     };
 
     const rows = exportData.map(s => {
       let daysText = "N/A";
-      if (s.freeTimeDate) {
+      if (s.freeTimeDate && isValidDate(s.freeTimeDate)) {
         const freeTimeUTC = new Date(s.freeTimeDate);
         freeTimeUTC.setHours(0, 0, 0, 0);
         const diffTime = freeTimeUTC.getTime() - todayTime;
@@ -325,8 +323,8 @@ export const DemurrageControl: React.FC<{ shipments: Shipment[] }> = ({ shipment
       ];
     });
 
-    const escapeCSV = (val: string) => {
-      const clean = val.replace(/"/g, '""');
+    const escapeCSV = (val: any) => {
+      const clean = String(val || '').replace(/"/g, '""');
       if (clean.includes(",") || clean.includes("\n") || clean.includes('"') || clean.includes(";")) {
         return `"${clean}"`;
       }
@@ -351,8 +349,9 @@ export const DemurrageControl: React.FC<{ shipments: Shipment[] }> = ({ shipment
   };
 
   const renderContainerCard = (s: Shipment) => {
-    const diffDays = s.freeTimeDate 
-      ? Math.ceil((new Date(s.freeTimeDate).setHours(0,0,0,0) - todayTime) / (1000 * 60 * 60 * 24))
+    const freeTimeDateObj = s.freeTimeDate && isValidDate(s.freeTimeDate) ? new Date(s.freeTimeDate) : null;
+    const diffDays = freeTimeDateObj 
+      ? Math.ceil((freeTimeDateObj.setHours(0,0,0,0) - todayTime) / (1000 * 60 * 60 * 24))
       : null;
 
     const roadblock = getRoadblockDetails(s, diffDays);
@@ -369,7 +368,6 @@ export const DemurrageControl: React.FC<{ shipments: Shipment[] }> = ({ shipment
         className="bg-white border border-slate-200 hover:border-slate-350 hover:shadow-md rounded-2xl p-4 transition-all duration-250 flex flex-col justify-between gap-3 relative"
       >
         <div className="flex justify-between items-start gap-2">
-          {/* Primary Reference Key: Prominent Container Number */}
           <div className="flex flex-col">
             <span className="font-mono font-black text-slate-850 tracking-tight text-sm select-all">
               {s.containerNumber}
@@ -379,13 +377,11 @@ export const DemurrageControl: React.FC<{ shipments: Shipment[] }> = ({ shipment
             </span>
           </div>
 
-          {/* Dynamic Days Counter Badge */}
           <span className={`text-[10px] px-2.5 py-1 rounded-full font-bold shadow-sm ${countdown.style}`}>
             {countdown.text}
           </span>
         </div>
 
-        {/* Vessel Name & Voyage */}
         <div className="space-y-1">
           <div className="flex items-center gap-1.5 text-xs text-slate-600">
             <Ship className="w-3.5 h-3.5 text-slate-400" />
@@ -399,37 +395,32 @@ export const DemurrageControl: React.FC<{ shipments: Shipment[] }> = ({ shipment
           </div>
         </div>
 
-        {/* Carrier, Location & Roadblock Indicators */}
         <div className="pt-2 border-t border-slate-100 flex flex-col gap-2">
           <div className="flex justify-between items-center">
             <span className="text-[10px] font-black uppercase text-slate-400">Carrier / Location</span>
             <span className="text-[10px] font-mono bg-slate-105 border font-semibold px-2 py-0.5 rounded text-slate-600">
-              {s.bondedWarehouse ? s.bondedWarehouse.toUpperCase() : "PORT YARD"}
+              {s.bondedWarehouse ? String(s.bondedWarehouse).toUpperCase() : "PORT YARD"}
             </span>
           </div>
 
           <div className="flex justify-between items-center">
-            {/* Carrier Display */}
             <span className={`text-xs font-black ${normalizedCarrier === "MSC" ? "text-amber-600" : normalizedCarrier === "CMA CGM" ? "text-blue-600" : "text-indigo-600"}`}>
               {normalizedCarrier}
             </span>
             
-            {/* Location */}
             <span className="text-xs text-slate-500 font-semibold truncate max-w-[130px]">
               {s.status || "At Sea Pipeline"}
             </span>
           </div>
 
-          {/* Roadblock Badge (Visual Urgency) */}
           <div className={`mt-1 py-1.5 px-3 border rounded-xl text-[10px] font-black tracking-wide text-center uppercase ${roadblock.color}`}>
             {roadblock.label}
           </div>
         </div>
 
-        {/* Exp Date Row */}
         <div className="flex justify-between mt-1 pt-1.5 text-[10px] font-mono text-slate-400 border-t border-slate-50 font-bold">
           <span>EXPIRY DATE:</span>
-          <span className="text-slate-600">{s.freeTimeDate ? new Date(s.freeTimeDate).toLocaleDateString() : 'Desconhecido'}</span>
+          <span className="text-slate-600">{s.freeTimeDate && isValidDate(s.freeTimeDate) ? new Date(s.freeTimeDate).toLocaleDateString() : 'Desconhecido'}</span>
         </div>
       </motion.div>
     );
@@ -471,7 +462,7 @@ export const DemurrageControl: React.FC<{ shipments: Shipment[] }> = ({ shipment
           
           <button
             onClick={handleExportExcel}
-            className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider bg-emerald-600 hover:bg-emerald-500 text-white transition-all border border-emerald-500/20 shadow-md w-full sm:w-auto"
+            className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider bg-emerald-600 hover:bg-emerald-500 text-white transition-all border border-emerald-500/20 shadow-md w-full sm:w-auto cursor-pointer"
           >
             <Download className="w-4 h-4" />
             <span>Export Excel</span>
@@ -483,7 +474,7 @@ export const DemurrageControl: React.FC<{ shipments: Shipment[] }> = ({ shipment
       <div className="bg-white border border-slate-200 rounded-[2.25rem] p-6 shadow-sm overflow-hidden transition-all duration-300">
         <button
           onClick={() => setIsRatesPanelOpen(!isRatesPanelOpen)}
-          className="w-full flex justify-between items-center"
+          className="w-full flex justify-between items-center cursor-pointer"
         >
           <div className="flex items-center gap-3">
             <Sliders className="w-5 h-5 text-red-600" />
@@ -530,7 +521,6 @@ export const DemurrageControl: React.FC<{ shipments: Shipment[] }> = ({ shipment
                 ))}
               </div>
 
-              {/* Advanced Risk Modeling Interactive Slider */}
               <div className="bg-red-50/50 border border-red-100/50 rounded-2xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div className="space-y-1">
                   <h4 className="font-extrabold text-slate-800 text-xs uppercase flex items-center gap-1.5">
@@ -551,7 +541,7 @@ export const DemurrageControl: React.FC<{ shipments: Shipment[] }> = ({ shipment
                     max="30" 
                     value={projectedDelayFactor}
                     onChange={(e) => setProjectedDelayFactor(Number(e.target.value))}
-                    className="w-full md:w-44 accent-red-600"
+                    className="w-full md:w-44 accent-red-600 cursor-pointer"
                   />
                 </div>
               </div>
@@ -563,7 +553,7 @@ export const DemurrageControl: React.FC<{ shipments: Shipment[] }> = ({ shipment
       {/* Financial & Prevention Metrics (KPI Top Ribbon) */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         
-        {/* KPI 1: Active Incurred Cost (Com Demurrage) */}
+        {/* KPI 1 */}
         <div className="bg-white border border-slate-250 p-6 rounded-[2.25rem] shadow-sm flex flex-col justify-between group relative overflow-hidden min-h-[170px]">
           <div className="absolute right-0 top-0 -mr-6 -mt-6 bg-red-50 w-24 h-24 rounded-full -z-10 group-hover:scale-105 transition-transform duration-300" />
           <div className="flex justify-between items-start">
@@ -588,7 +578,7 @@ export const DemurrageControl: React.FC<{ shipments: Shipment[] }> = ({ shipment
           </div>
         </div>
 
-        {/* KPI 2: Projected Financial Exposure */}
+        {/* KPI 2 */}
         <div className="bg-white border border-slate-250 p-6 rounded-[2.25rem] shadow-sm flex flex-col justify-between group relative overflow-hidden min-h-[170px]">
           <div className="absolute right-0 top-0 -mr-6 -mt-6 bg-orange-50 w-24 h-24 rounded-full -z-10 group-hover:scale-105 transition-transform duration-300" />
           <div className="flex justify-between items-start">
@@ -613,7 +603,7 @@ export const DemurrageControl: React.FC<{ shipments: Shipment[] }> = ({ shipment
           </div>
         </div>
 
-        {/* KPI 3: Actionable Active Assets (Total Exposure Count) */}
+        {/* KPI 3 */}
         <div className="bg-white border border-slate-250 p-6 rounded-[2.25rem] shadow-sm flex flex-col justify-between group relative overflow-hidden min-h-[170px]">
           <div className="absolute right-0 top-0 -mr-6 -mt-6 bg-indigo-50 w-24 h-24 rounded-full -z-10 group-hover:scale-105 transition-transform duration-300" />
           <div className="flex justify-between items-start">
@@ -638,7 +628,7 @@ export const DemurrageControl: React.FC<{ shipments: Shipment[] }> = ({ shipment
           </div>
         </div>
 
-        {/* KPI 4: Historic Protection Quotient */}
+        {/* KPI 4 */}
         <div className="bg-white border border-slate-250 p-6 rounded-[2.25rem] shadow-sm flex flex-col justify-between group relative overflow-hidden min-h-[170px]">
           <div className="absolute right-0 top-0 -mr-6 -mt-6 bg-emerald-50 w-24 h-24 rounded-full -z-10 group-hover:scale-105 transition-transform duration-300" />
           <div className="flex justify-between items-start">
@@ -667,8 +657,7 @@ export const DemurrageControl: React.FC<{ shipments: Shipment[] }> = ({ shipment
 
       </div>
 
-      {// Interactive Search & Filtering Controls Area
-      }
+      {/* Interactive Search & Filtering Controls Area */}
       <div className="bg-slate-100 p-5 rounded-2xl border border-slate-205 flex flex-col sm:flex-row gap-4 items-center justify-between text-xs font-bold text-slate-600">
         <div className="flex-1 w-full relative">
           <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
@@ -684,7 +673,6 @@ export const DemurrageControl: React.FC<{ shipments: Shipment[] }> = ({ shipment
         </div>
 
         <div className="flex gap-4 w-full sm:w-auto overflow-x-auto select-none">
-          {/* Shipowner Dropdown */}
           <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-xl border border-slate-200">
             <span className="text-slate-400 uppercase text-[9px] font-bold">CARRIER:</span>
             <select 
@@ -701,7 +689,6 @@ export const DemurrageControl: React.FC<{ shipments: Shipment[] }> = ({ shipment
             </select>
           </div>
 
-          {/* Terminal Dropdown */}
           <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-xl border border-slate-200">
             <span className="text-slate-400 uppercase text-[9px] font-bold">TERMINAL:</span>
             <select 
@@ -718,7 +705,7 @@ export const DemurrageControl: React.FC<{ shipments: Shipment[] }> = ({ shipment
         </div>
       </div>
 
-      {/* Overhauled Kanban / Board Columns Grid */}
+      {/* Kanban / Board Columns Grid */}
       <div className="space-y-4">
         <h3 className="text-lg font-black tracking-tight text-slate-800 uppercase flex items-center gap-2.5">
           <span>Active Command Columns</span>
@@ -752,14 +739,14 @@ export const DemurrageControl: React.FC<{ shipments: Shipment[] }> = ({ shipment
             </div>
           </div>
 
-          {/* COLUMN 2: COM DEMURRAGE (Crimson Red / High Attention) */}
+          {/* COLUMN 2: COM DEMURRAGE */}
           <div className="flex flex-col bg-red-50/20 border border-red-200 rounded-3xl overflow-hidden shadow-inner min-h-[500px]">
             <div className="p-4 bg-red-100 border-b border-red-200 flex items-center justify-between">
               <div>
                 <h4 className="text-[11px] font-black text-red-700 uppercase tracking-wider block">Atrasado (Overdue)</h4>
                 <p className="text-[9px] uppercase font-bold text-red-500 mt-0.5">Expired Free Time</p>
               </div>
-              <span className="bg-red-520 bg-red-600 text-white text-xs font-black font-mono px-3 py-1 rounded-full shadow-sm">
+              <span className="bg-red-600 text-white text-xs font-black font-mono px-3 py-1 rounded-full shadow-sm">
                 {demurrage.filter(filterShipmentByUI).length}
               </span>
             </div>
@@ -775,7 +762,7 @@ export const DemurrageControl: React.FC<{ shipments: Shipment[] }> = ({ shipment
             </div>
           </div>
 
-          {/* COLUMN 3: ALTO RISCO (≤ 5 Days Remaining) */}
+          {/* COLUMN 3: ALTO RISCO */}
           <div className="flex flex-col bg-orange-50/20 border border-orange-200 rounded-3xl overflow-hidden shadow-inner min-h-[500px]">
             <div className="p-4 bg-orange-100 border-b border-orange-200 flex items-center justify-between">
               <div>
@@ -798,7 +785,7 @@ export const DemurrageControl: React.FC<{ shipments: Shipment[] }> = ({ shipment
             </div>
           </div>
 
-          {/* COLUMN 4: RISCO MODERADO (6-15 Days Remaining) */}
+          {/* COLUMN 4: RISCO MODERADO */}
           <div className="flex flex-col bg-slate-50 border border-slate-200 rounded-3xl overflow-hidden shadow-inner min-h-[500px]">
             <div className="p-4 bg-amber-50 border-b border-amber-200 flex items-center justify-between">
               <div>
@@ -821,7 +808,7 @@ export const DemurrageControl: React.FC<{ shipments: Shipment[] }> = ({ shipment
             </div>
           </div>
 
-          {/* COLUMN 5: ATENÇÃO (16-20 Days Remaining) */}
+          {/* COLUMN 5: ATENÇÃO */}
           <div className="flex flex-col bg-slate-50 border border-slate-200 rounded-3xl overflow-hidden shadow-inner min-h-[500px]">
             <div className="p-4 bg-yellow-50 border-b border-yellow-250 flex items-center justify-between">
               <div>
@@ -830,7 +817,7 @@ export const DemurrageControl: React.FC<{ shipments: Shipment[] }> = ({ shipment
               </div>
               <span className="bg-yellow-400 text-slate-800 text-xs font-black font-mono px-3 py-1 rounded-full shadow-sm">
                 {lowRisk.filter(filterShipmentByUI).filter(s => {
-                  if (!s.freeTimeDate) return false;
+                  if (!s.freeTimeDate || !isValidDate(s.freeTimeDate)) return false;
                   const diff = Math.ceil((new Date(s.freeTimeDate).getTime() - todayTime) / (1000 * 60 * 60 * 24));
                   return diff <= 20;
                 }).length}
@@ -839,12 +826,12 @@ export const DemurrageControl: React.FC<{ shipments: Shipment[] }> = ({ shipment
             <div className="flex-1 p-3.5 space-y-3.5 overflow-y-auto max-h-[600px] demurrage-board-col">
               <AnimatePresence>
                 {lowRisk.filter(filterShipmentByUI).filter(s => {
-                  if (!s.freeTimeDate) return false;
+                  if (!s.freeTimeDate || !isValidDate(s.freeTimeDate)) return false;
                   const diff = Math.ceil((new Date(s.freeTimeDate).getTime() - todayTime) / (1000 * 60 * 60 * 24));
                   return diff <= 20;
                 }).map(renderContainerCard)}
                 {lowRisk.filter(filterShipmentByUI).filter(s => {
-                  if (!s.freeTimeDate) return false;
+                  if (!s.freeTimeDate || !isValidDate(s.freeTimeDate)) return false;
                   const diff = Math.ceil((new Date(s.freeTimeDate).getTime() - todayTime) / (1000 * 60 * 60 * 24));
                   return diff <= 20;
                 }).length === 0 && (
@@ -856,7 +843,7 @@ export const DemurrageControl: React.FC<{ shipments: Shipment[] }> = ({ shipment
             </div>
           </div>
 
-          {/* COLUMN 6: SOB CONTROLE (21+ Days Remaining) */}
+          {/* COLUMN 6: SOB CONTROLE */}
           <div className="flex flex-col bg-emerald-50/10 border border-emerald-100 rounded-3xl overflow-hidden shadow-inner min-h-[500px]">
             <div className="p-4 bg-emerald-50 border-b border-emerald-150 flex items-center justify-between">
               <div>
@@ -865,7 +852,7 @@ export const DemurrageControl: React.FC<{ shipments: Shipment[] }> = ({ shipment
               </div>
               <span className="bg-emerald-500 text-white text-xs font-black font-mono px-3 py-1 rounded-full shadow-sm">
                 {lowRisk.filter(filterShipmentByUI).filter(s => {
-                  if (!s.freeTimeDate) return false;
+                  if (!s.freeTimeDate || !isValidDate(s.freeTimeDate)) return false;
                   const diff = Math.ceil((new Date(s.freeTimeDate).getTime() - todayTime) / (1000 * 60 * 60 * 24));
                   return diff > 20;
                 }).length}
@@ -874,12 +861,12 @@ export const DemurrageControl: React.FC<{ shipments: Shipment[] }> = ({ shipment
             <div className="flex-1 p-3.5 space-y-3.5 overflow-y-auto max-h-[600px] demurrage-board-col">
               <AnimatePresence>
                 {lowRisk.filter(filterShipmentByUI).filter(s => {
-                  if (!s.freeTimeDate) return false;
+                  if (!s.freeTimeDate || !isValidDate(s.freeTimeDate)) return false;
                   const diff = Math.ceil((new Date(s.freeTimeDate).getTime() - todayTime) / (1000 * 60 * 60 * 24));
                   return diff > 20;
                 }).map(renderContainerCard)}
                 {lowRisk.filter(filterShipmentByUI).filter(s => {
-                  if (!s.freeTimeDate) return false;
+                  if (!s.freeTimeDate || !isValidDate(s.freeTimeDate)) return false;
                   const diff = Math.ceil((new Date(s.freeTimeDate).getTime() - todayTime) / (1000 * 60 * 60 * 24));
                   return diff > 20;
                 }).length === 0 && (

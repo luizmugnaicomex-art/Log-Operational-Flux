@@ -15,6 +15,8 @@ interface ShipmentTableProps {
     subtitle?: string;
 }
 
+const isValidDate = (d: any): d is Date => d instanceof Date && !isNaN(d.getTime());
+
 const TableHeader: React.FC<{
     sortKey: keyof Shipment;
     label: string;
@@ -58,23 +60,23 @@ const TableHeader: React.FC<{
 };
 
 const ShipmentTable: React.FC<ShipmentTableProps> = ({
-    shipments,
+    shipments = [],
     sortConfig,
     onSort,
     searchTerm,
     onSearch,
     currentPage,
-    totalItems,
-    itemsPerPage,
+    totalItems = 0,
+    itemsPerPage = 50,
     onPageChange,
     subtitle,
 }) => {
     const totalPages = Math.ceil(totalItems / itemsPerPage);
-    const startItem = (currentPage - 1) * itemsPerPage + 1;
+    const startItem = totalItems > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0;
     const endItem = Math.min(startItem + itemsPerPage - 1, totalItems);
 
     const formatDate = (date: Date | null) =>
-        date ? date.toLocaleDateString() : 'N/A';
+        date && isValidDate(date) ? date.toLocaleDateString() : 'N/A';
 
     return (
         <div className="glass rounded-[2rem] shadow-glass border-none overflow-hidden ring-1 ring-white/40">
@@ -199,11 +201,12 @@ const ShipmentTable: React.FC<ShipmentTableProps> = ({
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-white/10">
-                        {shipments.length > 0 ? (
+                        {Array.isArray(shipments) && shipments.length > 0 ? (
                             shipments.map((s, index) => {
+                                if (!s) return null;
                                 const variance = s.clientDeliveryVariance;
                                 let varianceClass = 'text-slate-700';
-                                if (variance !== null) {
+                                if (variance !== null && variance !== undefined) {
                                     varianceClass =
                                         variance > 0
                                             ? 'text-rose-600 font-black'
@@ -212,7 +215,7 @@ const ShipmentTable: React.FC<ShipmentTableProps> = ({
 
                                 const detentionRisk = s.detentionRisk;
                                 let detentionRiskClass = 'text-slate-700';
-                                if (detentionRisk !== null) {
+                                if (detentionRisk !== null && detentionRisk !== undefined) {
                                     detentionRiskClass =
                                         detentionRisk > 0
                                             ? 'text-rose-600 font-black'
@@ -221,17 +224,17 @@ const ShipmentTable: React.FC<ShipmentTableProps> = ({
 
                                 return (
                                     <tr
-                                        key={index}
+                                        key={s.containerNumber || index}
                                         className="hover:bg-white/40 transition-colors group"
                                     >
                                         <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-900 font-black tracking-tight">
                                             {s.containerNumber || '-'}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-700 font-medium">
-                                            {s.shipper}
+                                            {s.shipper || '-'}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-500 font-medium">
-                                            {s.carrier}
+                                            {s.carrier || '-'}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-500">
                                             {s.vesselName || '-'}
@@ -252,7 +255,7 @@ const ShipmentTable: React.FC<ShipmentTableProps> = ({
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-500">
-                                            {s.cargo}
+                                            {s.cargo || '-'}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-500">
                                             {formatDate(s.ata)}
@@ -263,7 +266,7 @@ const ShipmentTable: React.FC<ShipmentTableProps> = ({
                                         <td
                                             className={`px-6 py-4 whitespace-nowrap text-xs ${varianceClass}`}
                                         >
-                                            {variance !== null
+                                            {variance !== null && variance !== undefined
                                                 ? variance > 0
                                                     ? `+${variance}`
                                                     : variance
@@ -275,14 +278,14 @@ const ShipmentTable: React.FC<ShipmentTableProps> = ({
                                         <td
                                             className={`px-6 py-4 whitespace-nowrap text-xs ${detentionRiskClass} text-center`}
                                         >
-                                            {detentionRisk !== null
+                                            {detentionRisk !== null && detentionRisk !== undefined
                                                 ? detentionRisk > 0
                                                     ? `+${detentionRisk}`
                                                     : detentionRisk
                                                 : '-'}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-800 font-black">
-                                            {s.demurrageCost > 0
+                                            {(s.demurrageCost || 0) > 0
                                                 ? currencyFormatter.format(
                                                       s.demurrageCost
                                                   )
@@ -314,11 +317,11 @@ const ShipmentTable: React.FC<ShipmentTableProps> = ({
                     <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">
                         Index{' '}
                         <span className="text-slate-800">
-                            {totalItems > 0 ? startItem : 0}
+                            {startItem}
                         </span>{' '}
                         —{' '}
                         <span className="text-slate-800">
-                            {totalItems > 0 ? endItem : 0}
+                            {endItem}
                         </span>{' '}
                         of{' '}
                         <span className="text-slate-800">{totalItems}</span>{' '}
@@ -329,14 +332,14 @@ const ShipmentTable: React.FC<ShipmentTableProps> = ({
                     <button
                         onClick={() => onPageChange(currentPage - 1)}
                         disabled={currentPage === 1}
-                        className="glass px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-600 hover:text-slate-900 hover:bg-white/60 disabled:opacity-30 disabled:cursor-not-allowed transition-all ring-1 ring-white/50"
+                        className="glass px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-600 hover:text-slate-900 hover:bg-white/60 disabled:opacity-30 disabled:cursor-not-allowed transition-all ring-1 ring-white/50 cursor-pointer"
                     >
                         Previous
                     </button>
                     <button
                         onClick={() => onPageChange(currentPage + 1)}
                         disabled={currentPage === totalPages || totalPages === 0}
-                        className="glass px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-600 hover:text-slate-900 hover:bg-white/60 disabled:opacity-30 disabled:cursor-not-allowed transition-all ring-1 ring-white/50"
+                        className="glass px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-600 hover:text-slate-900 hover:bg-white/60 disabled:opacity-30 disabled:cursor-not-allowed transition-all ring-1 ring-white/50 cursor-pointer"
                     >
                         Next
                     </button>
