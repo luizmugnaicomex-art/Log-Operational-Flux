@@ -1,13 +1,46 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import { Shipment } from '../types';
-import { Building2, Save, FileText, Trash2, Network, Filter } from 'lucide-react';
+import { Building2, Save, FileText, Trash2, Filter } from 'lucide-react';
 
 interface GeneralWarehouseDistributionProps {
     shipments: Shipment[];
 }
 
 const isValidDate = (d: any): d is Date => d instanceof Date && !isNaN(d.getTime());
+
+interface WarehouseConfig {
+    key: string;
+    name: string;
+    match: string[];
+    color: string;
+    text: string;
+    border: string;
+    bg: string;
+}
+
+const GENERAL_WAREHOUSES: WarehouseConfig[] = [
+    { key: 'cts_jw', name: 'AG - CTS J&W', match: ['J&W', 'J & W', 'JW'], color: 'bg-indigo-500', text: 'text-indigo-400', border: 'border-t-indigo-500', bg: 'bg-indigo-50' },
+    { key: 'cts_logic', name: 'AG - CTS LOGIC', match: ['LOGIC'], color: 'bg-violet-500', text: 'text-violet-400', border: 'border-t-violet-500', bg: 'bg-violet-50' },
+    { key: 'cts_pontual', name: 'AG - CTS PONTUAL', match: ['PONTUAL'], color: 'bg-purple-500', text: 'text-purple-400', border: 'border-t-purple-500', bg: 'bg-purple-50' },
+    { key: 'cts_uni', name: 'AG - CTS UNI', match: ['UNI'], color: 'bg-fuchsia-500', text: 'text-fuchsia-400', border: 'border-t-fuchsia-500', bg: 'bg-fuchsia-50' },
+    { key: 'cts_vbr', name: 'AG - CTS VBR', match: ['VBR'], color: 'bg-pink-500', text: 'text-pink-400', border: 'border-t-pink-500', bg: 'bg-pink-50' },
+    { key: 'inter_cdex', name: 'AG - INTER CDEX', match: ['CDEX', 'SEDEX', 'INTER CDEX'], color: 'bg-blue-500', text: 'text-blue-400', border: 'border-t-blue-500', bg: 'bg-blue-50' },
+    { key: 'multilog', name: 'AG - MULTILOG', match: ['MULTILOG'], color: 'bg-cyan-500', text: 'text-cyan-400', border: 'border-t-cyan-500', bg: 'bg-cyan-50' },
+    { key: 'area_23', name: 'AREA 23', match: ['AREA 23', 'ÁREA 23', 'AREA23'], color: 'bg-emerald-500', text: 'text-emerald-400', border: 'border-t-emerald-500', bg: 'bg-emerald-50' },
+    { key: 'buffer_tercam', name: 'BUFFER - TERCAM', match: ['TERCAM', 'BUFFER'], color: 'bg-amber-500', text: 'text-amber-400', border: 'border-t-amber-500', bg: 'bg-amber-50' },
+    { key: 'other', name: 'OTHER GENERAL', match: [], color: 'bg-slate-500', text: 'text-slate-400', border: 'border-t-slate-500', bg: 'bg-slate-100' }
+];
+
+const getWarehouseKey = (gw: string): string => {
+    const upper = gw.toUpperCase().trim();
+    for (const wh of GENERAL_WAREHOUSES) {
+        if (wh.key !== 'other' && wh.match.some(m => upper.includes(m))) {
+            return wh.key;
+        }
+    }
+    return 'other';
+};
 
 export const GeneralWarehouseDistribution: React.FC<GeneralWarehouseDistributionProps> = ({ shipments }) => {
     const [justifications, setJustifications] = useState<Record<string, string>>(() => {
@@ -48,6 +81,8 @@ export const GeneralWarehouseDistribution: React.FC<GeneralWarehouseDistribution
         if (!Array.isArray(shipments)) return [];
         return shipments.filter(s => {
             if (!s) return false;
+            // Only count if there is an assigned General Warehouse
+            if (!s.generalWarehouse || !s.generalWarehouse.trim()) return false;
             if (selectedIncoterms.length === 0) return true;
             return s.incoterm && selectedIncoterms.includes(s.incoterm.toUpperCase().trim());
         });
@@ -72,7 +107,7 @@ export const GeneralWarehouseDistribution: React.FC<GeneralWarehouseDistribution
 
     const dataByMonth = useMemo(() => {
         if (!Array.isArray(filteredShipments)) return [];
-        const map = new Map<string, { total: number, tecon: number, intermaritima: number, tpc: number, clia: number, dateObj: Date }>();
+        const map = new Map<string, { total: number; counts: Record<string, number>; dateObj: Date }>();
         
         filteredShipments.forEach(s => {
             if (!s) return;
@@ -82,24 +117,20 @@ export const GeneralWarehouseDistribution: React.FC<GeneralWarehouseDistribution
             const monthKey = `${date.getFullYear()}_${date.getMonth()}`;
             
             if (!map.has(monthKey)) {
+                const initialCounts: Record<string, number> = {};
+                GENERAL_WAREHOUSES.forEach(wh => {
+                    initialCounts[wh.key] = 0;
+                });
                 map.set(monthKey, { 
                     total: 0, 
-                    tecon: 0, 
-                    intermaritima: 0, 
-                    tpc: 0, 
-                    clia: 0, 
+                    counts: initialCounts,
                     dateObj: new Date(date.getFullYear(), date.getMonth(), 1) 
                 });
             }
             
             const entry = map.get(monthKey)!;
-            
-            const gw = String(s.generalWarehouse || '').toUpperCase();
-            if (gw.includes('TECON')) entry.tecon++;
-            else if (gw.includes('INTERMARITIMA') || gw.includes('INTER')) entry.intermaritima++;
-            else if (gw.includes('TPC')) entry.tpc++;
-            else if (gw.includes('CLIA') || gw.includes('EMPORIO') || gw.includes('EMPÓRIO')) entry.clia++;
-            
+            const whKey = getWarehouseKey(s.generalWarehouse || '');
+            entry.counts[whKey]++;
             entry.total++;
         });
         
@@ -108,41 +139,59 @@ export const GeneralWarehouseDistribution: React.FC<GeneralWarehouseDistribution
             .map(m => {
                 const label = m.dateObj.toLocaleString('en-US', { month: 'long', year: 'numeric' });
                 const key = `${m.dateObj.getFullYear()}_${m.dateObj.getMonth()}`;
+                
+                const whBreakdown = GENERAL_WAREHOUSES.map(wh => {
+                    const count = m.counts[wh.key] || 0;
+                    return {
+                        ...wh,
+                        count,
+                        pct: m.total > 0 ? (count / m.total) * 150 : 0 // Normalized or just actual percentage:
+                    };
+                });
+
+                // Calculate actual percentages
+                const finalBreakdown = GENERAL_WAREHOUSES.map(wh => {
+                    const count = m.counts[wh.key] || 0;
+                    return {
+                        ...wh,
+                        count,
+                        pct: m.total > 0 ? (count / m.total) * 100 : 0
+                    };
+                });
+
                 return {
                     label,
                     key,
                     total: m.total,
-                    tecon: m.tecon,
-                    intermaritima: m.intermaritima,
-                    tpc: m.tpc,
-                    clia: m.clia,
-                    teconPct: m.total > 0 ? (m.tecon / m.total) * 100 : 0,
-                    intermaritimaPct: m.total > 0 ? (m.intermaritima / m.total) * 100 : 0,
-                    tpcPct: m.total > 0 ? (m.tpc / m.total) * 100 : 0,
-                    cliaPct: m.total > 0 ? (m.clia / m.total) * 100 : 0,
+                    breakdown: finalBreakdown
                 };
             });
     }, [filteredShipments]);
 
     // Totals for executive banner
     const totals = useMemo(() => {
-        const t = { tecon: 0, intermaritima: 0, tpc: 0, clia: 0, all: 0 };
-        dataByMonth.forEach(m => {
-            t.tecon += m.tecon;
-            t.intermaritima += m.intermaritima;
-            t.tpc += m.tpc;
-            t.clia += m.clia;
-            t.all += m.total;
+        const t: Record<string, number> = {};
+        let all = 0;
+        GENERAL_WAREHOUSES.forEach(wh => {
+            t[wh.key] = 0;
         });
-        return t;
-    }, [dataByMonth]);
 
-    const colors = {
-        tecon: 'bg-red-500',
-        intermaritima: 'bg-emerald-500',
-        tpc: 'bg-blue-500',
-        clia: 'bg-orange-500'
-    };
+        dataByMonth.forEach(m => {
+            m.breakdown.forEach(item => {
+                t[item.key] += item.count;
+            });
+            all += m.total;
+        });
+
+        return {
+            all,
+            breakdown: GENERAL_WAREHOUSES.map(wh => ({
+                ...wh,
+                count: t[wh.key] || 0,
+                pct: all > 0 ? ((t[wh.key] || 0) / all) * 100 : 0
+            }))
+        };
+    }, [dataByMonth]);
 
     return (
         <motion.div 
@@ -163,13 +212,13 @@ export const GeneralWarehouseDistribution: React.FC<GeneralWarehouseDistribution
                             <div className="bg-indigo-500/20 p-2.5 rounded-xl border border-indigo-500/30">
                                 <Building2 className="w-6 h-6 text-indigo-400" />
                             </div>
-                            <span className="text-[10px] font-black tracking-[0.25em] text-indigo-400 uppercase">Strategic Distribution</span>
+                            <span className="text-[10px] font-black tracking-[0.25em] text-indigo-400 uppercase">Strategic Storage</span>
                         </div>
                         <h2 className="text-3xl md:text-4xl font-display font-black tracking-tight leading-none mt-2">
                             General Warehouse Distribution
                         </h2>
                         <p className="text-sm text-slate-400 max-w-2xl font-medium">
-                            Monthly allocation of cleared containers across general warehouses (Tecon, Intermaritima, TPC, and Clia Emporio) with custom management justification notes.
+                            Monthly allocation of cleared containers across general warehouses (armazéns gerais) with custom strategic justifications.
                         </p>
                     </div>
 
@@ -184,27 +233,19 @@ export const GeneralWarehouseDistribution: React.FC<GeneralWarehouseDistribution
                 </div>
 
                 {/* Executive Totals */}
-                <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mt-8 pt-8 border-t border-slate-800/60 relative z-10">
-                    <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-5 backdrop-blur-sm">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 mt-8 pt-8 border-t border-slate-800/60 relative z-10">
+                    <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-5 backdrop-blur-sm col-span-2 sm:col-span-1 flex flex-col justify-center">
                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Total Volume</span>
-                        <div className="text-3xl font-display font-black">{totals.all}</div>
+                        <div className="text-3xl font-display font-black">{totals.all} <span className="text-xs text-slate-500 font-bold">CNTR</span></div>
                     </div>
-                    <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-5 backdrop-blur-sm border-t-2 border-t-red-500">
-                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Tecon S.A.</span>
-                        <div className="text-2xl font-display font-black">{totals.tecon} <span className="text-xs text-slate-500">({totals.all > 0 ? (totals.tecon/totals.all*100).toFixed(1) : 0}%)</span></div>
-                    </div>
-                    <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-5 backdrop-blur-sm border-t-2 border-t-emerald-500">
-                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Intermaritima</span>
-                        <div className="text-2xl font-display font-black">{totals.intermaritima} <span className="text-xs text-slate-500">({totals.all > 0 ? (totals.intermaritima/totals.all*100).toFixed(1) : 0}%)</span></div>
-                    </div>
-                    <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-5 backdrop-blur-sm border-t-2 border-t-blue-500">
-                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">TPC</span>
-                        <div className="text-2xl font-display font-black">{totals.tpc} <span className="text-xs text-slate-500">({totals.all > 0 ? (totals.tpc/totals.all*100).toFixed(1) : 0}%)</span></div>
-                    </div>
-                    <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-5 backdrop-blur-sm border-t-2 border-t-orange-500">
-                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Clia Emporio</span>
-                        <div className="text-2xl font-display font-black">{totals.clia} <span className="text-xs text-slate-500">({totals.all > 0 ? (totals.clia/totals.all*100).toFixed(1) : 0}%)</span></div>
-                    </div>
+                    {totals.breakdown.map((wh) => (
+                        <div key={wh.key} className={`bg-slate-800/40 border border-slate-700/50 rounded-2xl p-4 backdrop-blur-sm border-t-2 ${wh.border}`}>
+                            <span className="text-[10px] font-black text-slate-300 uppercase tracking-wide block mb-1 truncate">{wh.name}</span>
+                            <div className="text-xl font-display font-black text-white">
+                                {wh.count} <span className="text-[10px] text-slate-500 font-bold">({wh.pct.toFixed(1)}%)</span>
+                            </div>
+                        </div>
+                    ))}
                 </div>
             </div>
 
@@ -253,8 +294,8 @@ export const GeneralWarehouseDistribution: React.FC<GeneralWarehouseDistribution
             {/* Grid of Months */}
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
                 {dataByMonth.length === 0 ? (
-                    <div className="col-span-full glass p-12 rounded-[3rem] text-center">
-                        <p className="text-slate-500 font-bold uppercase tracking-widest text-sm">No arrived shipments found in this view to analyze general warehouse distribution.</p>
+                    <div className="col-span-full glass p-12 rounded-[3rem] text-center bg-white">
+                        <p className="text-slate-500 font-bold uppercase tracking-widest text-sm">No general warehouse allocations found for the active selection.</p>
                     </div>
                 ) : (
                     dataByMonth.map((month) => (
@@ -272,16 +313,11 @@ export const GeneralWarehouseDistribution: React.FC<GeneralWarehouseDistribution
                             </div>
 
                             {/* Bar Charts */}
-                            <div className="space-y-4 mb-8 flex-1">
-                                {[
-                                    { name: 'Tecon S.A.', count: month.tecon, pct: month.teconPct, color: colors.tecon, bg: 'bg-red-50' },
-                                    { name: 'Intermaritima', count: month.intermaritima, pct: month.intermaritimaPct, color: colors.intermaritima, bg: 'bg-emerald-50' },
-                                    { name: 'TPC', count: month.tpc, pct: month.tpcPct, color: colors.tpc, bg: 'bg-blue-50' },
-                                    { name: 'Clia Emporio', count: month.clia, pct: month.cliaPct, color: colors.clia, bg: 'bg-orange-50' }
-                                ].map((wh) => (
-                                    <div key={wh.name} className="relative">
+                            <div className="space-y-3.5 mb-8 flex-1">
+                                {month.breakdown.map((wh) => (
+                                    <div key={wh.key} className="relative">
                                         <div className="flex justify-between text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1.5">
-                                            <span>{wh.name}</span>
+                                            <span className="truncate max-w-[130px]">{wh.name}</span>
                                             <span className="text-slate-700">{wh.count} cont. ({wh.pct.toFixed(1)}%)</span>
                                         </div>
                                         <div className={`w-full h-2.5 rounded-full ${wh.bg} overflow-hidden flex`}>
