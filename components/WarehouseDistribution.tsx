@@ -138,10 +138,10 @@ export const WarehouseDistribution: React.FC<WarehouseDistributionProps> = ({ sh
     }, [dataByMonth]);
 
     const colors = {
-        tecon: 'bg-blue-500',
+        tecon: 'bg-red-500',
         intermaritima: 'bg-emerald-500',
-        tpc: 'bg-amber-500',
-        clia: 'bg-purple-500'
+        tpc: 'bg-blue-500',
+        clia: 'bg-orange-500'
     };
 
     return (
@@ -186,7 +186,7 @@ export const WarehouseDistribution: React.FC<WarehouseDistributionProps> = ({ sh
                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Total Volume</span>
                         <div className="text-3xl font-display font-black">{totals.all}</div>
                     </div>
-                    <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-5 backdrop-blur-sm border-t-2 border-t-blue-500">
+                    <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-5 backdrop-blur-sm border-t-2 border-t-red-500">
                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Tecon S.A.</span>
                         <div className="text-2xl font-display font-black">{totals.tecon} <span className="text-xs text-slate-500">({totals.all > 0 ? (totals.tecon/totals.all*100).toFixed(1) : 0}%)</span></div>
                     </div>
@@ -194,11 +194,11 @@ export const WarehouseDistribution: React.FC<WarehouseDistributionProps> = ({ sh
                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Intermaritima</span>
                         <div className="text-2xl font-display font-black">{totals.intermaritima} <span className="text-xs text-slate-500">({totals.all > 0 ? (totals.intermaritima/totals.all*100).toFixed(1) : 0}%)</span></div>
                     </div>
-                    <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-5 backdrop-blur-sm border-t-2 border-t-amber-500">
+                    <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-5 backdrop-blur-sm border-t-2 border-t-blue-500">
                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">TPC</span>
                         <div className="text-2xl font-display font-black">{totals.tpc} <span className="text-xs text-slate-500">({totals.all > 0 ? (totals.tpc/totals.all*100).toFixed(1) : 0}%)</span></div>
                     </div>
-                    <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-5 backdrop-blur-sm border-t-2 border-t-purple-500">
+                    <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-5 backdrop-blur-sm border-t-2 border-t-orange-500">
                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Clia Emporio</span>
                         <div className="text-2xl font-display font-black">{totals.clia} <span className="text-xs text-slate-500">({totals.all > 0 ? (totals.clia/totals.all*100).toFixed(1) : 0}%)</span></div>
                     </div>
@@ -271,10 +271,10 @@ export const WarehouseDistribution: React.FC<WarehouseDistributionProps> = ({ sh
                             {/* Bar Charts */}
                             <div className="space-y-4 mb-8 flex-1">
                                 {[
-                                    { name: 'Tecon S.A.', count: month.tecon, pct: month.teconPct, color: colors.tecon, bg: 'bg-blue-50' },
+                                    { name: 'Tecon S.A.', count: month.tecon, pct: month.teconPct, color: colors.tecon, bg: 'bg-red-50' },
                                     { name: 'Intermaritima', count: month.intermaritima, pct: month.intermaritimaPct, color: colors.intermaritima, bg: 'bg-emerald-50' },
-                                    { name: 'TPC', count: month.tpc, pct: month.tpcPct, color: colors.tpc, bg: 'bg-amber-50' },
-                                    { name: 'Clia Emporio', count: month.clia, pct: month.cliaPct, color: colors.clia, bg: 'bg-purple-50' }
+                                    { name: 'TPC', count: month.tpc, pct: month.tpcPct, color: colors.tpc, bg: 'bg-blue-50' },
+                                    { name: 'Clia Emporio', count: month.clia, pct: month.cliaPct, color: colors.clia, bg: 'bg-orange-50' }
                                 ].map((wh) => (
                                     <div key={wh.name} className="relative">
                                         <div className="flex justify-between text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1.5">
