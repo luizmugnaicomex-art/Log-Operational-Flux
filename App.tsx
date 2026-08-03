@@ -18,13 +18,14 @@ import { EmptyContainersPanel } from "./components/EmptyContainersPanel";
 import PortYardOperationStatus from "./components/PortYardOperationStatus";
 import { BacklogView } from "./components/BacklogView";
 import { WarehouseDistribution } from "./components/WarehouseDistribution";
+import { GeneralWarehouseDistribution } from "./components/GeneralWarehouseDistribution";
 
 // Utils
 import { processRawData, calculateDashboardData, toUTC, getISOWeek } from "./utils/dataProcessor";
 import { currencyFormatter } from "./utils/formatters";
 import { Shipment, SortConfig, PipelineWeek } from "./types";
 
-type MainView = "performance" | "goods_analysis" | "current_inventory" | "vessel_matrix" | "demurrage_control" | "port_yard_status" | "backlog" | "warehouse_distribution";
+type MainView = "performance" | "goods_analysis" | "current_inventory" | "vessel_matrix" | "demurrage_control" | "port_yard_status" | "backlog" | "warehouse_distribution" | "general_warehouse_distribution";
 
 const isValidDate = (d: any): d is Date => d instanceof Date && !isNaN(d.getTime());
 
@@ -509,6 +510,7 @@ export default function App() {
                 { id: 'demurrage_control', label: 'Chronos', icon: 'schedule' },
                 { id: 'port_yard_status', label: 'Port & Yard', icon: 'precision_manufacturing' },
                 { id: 'warehouse_distribution', label: 'Warehouse Dist', icon: 'domain' },
+                { id: 'general_warehouse_distribution', label: 'General Warehouse', icon: 'business' },
                 { id: 'backlog', label: 'Backlog', icon: 'trending_up' }
               ].map((item) => (
                 <button
@@ -679,6 +681,8 @@ export default function App() {
           <PortYardOperationStatus shipments={filteredShipments} />
         ) : mainView === "warehouse_distribution" ? (
           <WarehouseDistribution shipments={filteredShipments} />
+        ) : mainView === "general_warehouse_distribution" ? (
+          <GeneralWarehouseDistribution shipments={filteredShipments} />
         ) : mainView === "backlog" ? (
           <BacklogView shipments={filteredShipments} />
         ) : null}
