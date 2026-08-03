@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { Shipment } from '../types';
-import { Building2, Save, FileText, Trash2, Network } from 'lucide-react';
+import { Building2, Save, FileText, Trash2, Network, Filter } from 'lucide-react';
 
 interface WarehouseDistributionProps {
     shipments: Shipment[];
@@ -19,6 +19,39 @@ export const WarehouseDistribution: React.FC<WarehouseDistributionProps> = ({ sh
             return {};
         }
     });
+
+    const [selectedIncoterms, setSelectedIncoterms] = useState<string[]>([]);
+
+    const uniqueIncoterms = useMemo(() => {
+        if (!Array.isArray(shipments)) return [];
+        const set = new Set<string>();
+        shipments.forEach(s => {
+            if (s && typeof s.incoterm === 'string') {
+                const trimmed = s.incoterm.trim().toUpperCase();
+                if (trimmed) set.add(trimmed);
+            }
+        });
+        return Array.from(set).sort();
+    }, [shipments]);
+
+    const toggleIncoterm = (incoterm: string) => {
+        setSelectedIncoterms(prev => {
+            if (prev.includes(incoterm)) {
+                return prev.filter(item => item !== incoterm);
+            } else {
+                return [...prev, incoterm];
+            }
+        });
+    };
+
+    const filteredShipments = useMemo(() => {
+        if (!Array.isArray(shipments)) return [];
+        return shipments.filter(s => {
+            if (!s) return false;
+            if (selectedIncoterms.length === 0) return true;
+            return s.incoterm && selectedIncoterms.includes(s.incoterm.toUpperCase().trim());
+        });
+    }, [shipments, selectedIncoterms]);
 
     const updateJustification = (key: string, value: string) => {
         const updated = { ...justifications, [key]: value };
@@ -38,10 +71,10 @@ export const WarehouseDistribution: React.FC<WarehouseDistributionProps> = ({ sh
     };
 
     const dataByMonth = useMemo(() => {
-        if (!Array.isArray(shipments)) return [];
+        if (!Array.isArray(filteredShipments)) return [];
         const map = new Map<string, { total: number, tecon: number, intermaritima: number, tpc: number, clia: number, dateObj: Date }>();
         
-        shipments.forEach(s => {
+        filteredShipments.forEach(s => {
             if (!s) return;
             const date = s.ata || s.estimatedDelivery;
             if (!date || !isValidDate(date)) return;
@@ -89,7 +122,7 @@ export const WarehouseDistribution: React.FC<WarehouseDistributionProps> = ({ sh
                     cliaPct: m.total > 0 ? (m.clia / m.total) * 100 : 0,
                 };
             });
-    }, [shipments]);
+    }, [filteredShipments]);
 
     // Totals for executive banner
     const totals = useMemo(() => {
@@ -169,6 +202,48 @@ export const WarehouseDistribution: React.FC<WarehouseDistributionProps> = ({ sh
                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Clia Emporio</span>
                         <div className="text-2xl font-display font-black">{totals.clia} <span className="text-xs text-slate-500">({totals.all > 0 ? (totals.clia/totals.all*100).toFixed(1) : 0}%)</span></div>
                     </div>
+                </div>
+            </div>
+
+            {/* Incoterm Agreement Filter Card */}
+            <div className="glass p-6 md:p-8 rounded-[2.5rem] bg-white ring-1 ring-white/50 shadow-glass flex flex-col md:flex-row md:items-center justify-between gap-6">
+                <div className="flex items-center gap-4">
+                    <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl border border-indigo-100 shadow-sm">
+                        <Filter className="w-5 h-5" />
+                    </div>
+                    <div>
+                        <h3 className="text-lg font-display font-black text-slate-800 tracking-tight">Incoterm Agreement Filter</h3>
+                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1">Select one or multiple Incoterms to slice the warehouse distribution analysis</p>
+                    </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                    <button
+                        onClick={() => setSelectedIncoterms([])}
+                        className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+                            selectedIncoterms.length === 0
+                                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
+                                : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                        }`}
+                    >
+                        All Agreements
+                    </button>
+                    {uniqueIncoterms.map((incoterm) => {
+                        const isSelected = selectedIncoterms.includes(incoterm);
+                        return (
+                            <button
+                                key={incoterm}
+                                onClick={() => toggleIncoterm(incoterm)}
+                                className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+                                    isSelected
+                                        ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
+                                        : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                                }`}
+                            >
+                                {incoterm}
+                            </button>
+                        );
+                    })}
                 </div>
             </div>
 
