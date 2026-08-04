@@ -19,13 +19,14 @@ import PortYardOperationStatus from "./components/PortYardOperationStatus";
 import { BacklogView } from "./components/BacklogView";
 import { WarehouseDistribution } from "./components/WarehouseDistribution";
 import { GeneralWarehouseDistribution } from "./components/GeneralWarehouseDistribution";
+import { DeliveriesView } from "./components/DeliveriesView";
 
 // Utils
 import { processRawData, calculateDashboardData, toUTC, getISOWeek } from "./utils/dataProcessor";
 import { currencyFormatter } from "./utils/formatters";
 import { Shipment, SortConfig, PipelineWeek } from "./types";
 
-type MainView = "performance" | "goods_analysis" | "current_inventory" | "vessel_matrix" | "demurrage_control" | "port_yard_status" | "backlog" | "warehouse_distribution" | "general_warehouse_distribution";
+type MainView = "performance" | "goods_analysis" | "current_inventory" | "vessel_matrix" | "demurrage_control" | "port_yard_status" | "backlog" | "warehouse_distribution" | "general_warehouse_distribution" | "deliveries";
 
 const isValidDate = (d: any): d is Date => d instanceof Date && !isNaN(d.getTime());
 
@@ -511,6 +512,7 @@ export default function App() {
                 { id: 'port_yard_status', label: 'Port & Yard', icon: 'precision_manufacturing' },
                 { id: 'warehouse_distribution', label: 'Warehouse Dist', icon: 'domain' },
                 { id: 'general_warehouse_distribution', label: 'General Warehouse', icon: 'business' },
+                { id: 'deliveries', label: 'Deliveries', icon: 'local_shipping' },
                 { id: 'backlog', label: 'Backlog', icon: 'trending_up' }
               ].map((item) => (
                 <button
@@ -683,6 +685,8 @@ export default function App() {
           <WarehouseDistribution shipments={filteredShipments} />
         ) : mainView === "general_warehouse_distribution" ? (
           <GeneralWarehouseDistribution shipments={filteredShipments} />
+        ) : mainView === "deliveries" ? (
+          <DeliveriesView shipments={filteredShipments} />
         ) : mainView === "backlog" ? (
           <BacklogView shipments={filteredShipments} />
         ) : null}
