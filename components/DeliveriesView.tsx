@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { Shipment } from '../types';
-import { Truck, Save, FileText, Trash2, Filter, Layers, CheckCircle } from 'lucide-react';
+import { Truck, Filter, Layers } from 'lucide-react';
 
 interface DeliveriesViewProps {
     shipments: Shipment[];
@@ -41,8 +41,22 @@ const WAREHOUSE_CONFIGS: WarehouseConfig[] = [
     { key: 'other', name: 'Other / Direct', color: 'bg-slate-500', text: 'text-slate-600', border: 'border-t-slate-500', bg: 'bg-slate-100/80', type: 'other' }
 ];
 
+const CARRIER_COLORS = [
+    { color: 'bg-emerald-500', text: 'text-emerald-600', border: 'border-t-emerald-500', bg: 'bg-emerald-50/80' },
+    { color: 'bg-blue-500', text: 'text-blue-600', border: 'border-t-blue-500', bg: 'bg-blue-50/80' },
+    { color: 'bg-indigo-500', text: 'text-indigo-600', border: 'border-t-indigo-500', bg: 'bg-indigo-50/80' },
+    { color: 'bg-rose-500', text: 'text-rose-600', border: 'border-t-rose-500', bg: 'bg-rose-50/80' },
+    { color: 'bg-orange-500', text: 'text-orange-600', border: 'border-t-orange-500', bg: 'bg-orange-50/80' },
+    { color: 'bg-violet-500', text: 'text-violet-600', border: 'border-t-violet-500', bg: 'bg-violet-50/80' },
+    { color: 'bg-teal-500', text: 'text-teal-600', border: 'border-t-teal-500', bg: 'bg-teal-50/80' },
+    { color: 'bg-cyan-500', text: 'text-cyan-600', border: 'border-t-cyan-500', bg: 'bg-cyan-50/80' },
+    { color: 'bg-pink-500', text: 'text-pink-600', border: 'border-t-pink-500', bg: 'bg-pink-50/80' },
+    { color: 'bg-amber-500', text: 'text-amber-600', border: 'border-t-amber-500', bg: 'bg-amber-50/80' },
+    { color: 'bg-sky-500', text: 'text-sky-600', border: 'border-t-sky-500', bg: 'bg-sky-50/80' },
+    { color: 'bg-slate-500', text: 'text-slate-600', border: 'border-t-slate-500', bg: 'bg-slate-100/80' }
+];
+
 const getWarehouseKey = (s: Shipment): string => {
-    // Check General Warehouse field first
     if (s.generalWarehouse && s.generalWarehouse.trim()) {
         const gw = s.generalWarehouse.toUpperCase();
         if (gw.includes('J&W') || gw.includes('J & W') || gw.includes('JW')) return 'cts_jw';
@@ -55,7 +69,6 @@ const getWarehouseKey = (s: Shipment): string => {
         if (gw.includes('AREA 23') || gw.includes('ÁREA 23') || gw.includes('AREA23')) return 'area_23';
         if (gw.includes('TERCAM') || gw.includes('BUFFER')) return 'buffer_tercam';
     }
-    // Check Bonded Warehouse field second
     if (s.bondedWarehouse && s.bondedWarehouse.trim()) {
         const bw = s.bondedWarehouse.toUpperCase();
         if (bw.includes('TECON')) return 'tecon';
@@ -67,16 +80,7 @@ const getWarehouseKey = (s: Shipment): string => {
 };
 
 export const DeliveriesView: React.FC<DeliveriesViewProps> = ({ shipments = [] }) => {
-    const [justifications, setJustifications] = useState<Record<string, string>>(() => {
-        try {
-            const saved = localStorage.getItem('deliveries_distribution_justifications');
-            return saved ? JSON.parse(saved) : {};
-        } catch (e) {
-            console.error('Error reading deliveries justifications', e);
-            return {};
-        }
-    });
-
+    const [groupMode, setGroupMode] = useState<'warehouse' | 'transport'>('warehouse');
     const [selectedIncoterms, setSelectedIncoterms] = useState<string[]>([]);
     const [warehouseTypeFilter, setWarehouseTypeFilter] = useState<'all' | 'bonded' | 'general'>('all');
 
@@ -112,22 +116,30 @@ export const DeliveriesView: React.FC<DeliveriesViewProps> = ({ shipments = [] }
         });
     }, [shipments, selectedIncoterms]);
 
-    const updateJustification = (key: string, value: string) => {
-        const updated = { ...justifications, [key]: value };
-        setJustifications(updated);
-        try {
-            localStorage.setItem('deliveries_distribution_justifications', JSON.stringify(updated));
-        } catch (e) {
-            console.error('Error saving deliveries justifications', e);
-        }
-    };
+    // Extract dynamic unique carriers & allocate consistent color schemes
+    const carrierConfigs = useMemo(() => {
+        if (!Array.isArray(shipments)) return [];
+        const carriersSet = new Set<string>();
+        shipments.forEach(s => {
+            if (s && typeof s.carrier === 'string') {
+                const name = s.carrier.trim().toUpperCase();
+                if (name && name !== 'UNKNOWN') carriersSet.add(name);
+            }
+        });
+        
+        const sortedCarriers = Array.from(carriersSet).sort();
+        // Append UNKNOWN to keep it at the end
+        sortedCarriers.push('UNKNOWN');
 
-    const clearAllNotes = () => {
-        if (window.confirm("Are you sure you want to clear all monthly delivery justification notes?")) {
-            setJustifications({});
-            localStorage.removeItem('deliveries_distribution_justifications');
-        }
-    };
+        return sortedCarriers.map((carrierName, index) => {
+            const colorScheme = CARRIER_COLORS[index % CARRIER_COLORS.length];
+            return {
+                key: carrierName,
+                name: carrierName,
+                ...colorScheme
+            };
+        });
+    }, [shipments]);
 
     // Group delivered shipments by their actual delivery date's month
     const dataByMonth = useMemo(() => {
@@ -142,9 +154,15 @@ export const DeliveriesView: React.FC<DeliveriesViewProps> = ({ shipments = [] }
             
             if (!map.has(monthKey)) {
                 const initialCounts: Record<string, number> = {};
-                WAREHOUSE_CONFIGS.forEach(wh => {
-                    initialCounts[wh.key] = 0;
-                });
+                if (groupMode === 'warehouse') {
+                    WAREHOUSE_CONFIGS.forEach(wh => {
+                        initialCounts[wh.key] = 0;
+                    });
+                } else {
+                    carrierConfigs.forEach(car => {
+                        initialCounts[car.key] = 0;
+                    });
+                }
                 map.set(monthKey, { 
                     total: 0, 
                     counts: initialCounts,
@@ -153,8 +171,21 @@ export const DeliveriesView: React.FC<DeliveriesViewProps> = ({ shipments = [] }
             }
             
             const entry = map.get(monthKey)!;
-            const whKey = getWarehouseKey(s);
-            entry.counts[whKey]++;
+            if (groupMode === 'warehouse') {
+                const whKey = getWarehouseKey(s);
+                if (entry.counts[whKey] !== undefined) {
+                    entry.counts[whKey]++;
+                } else {
+                    entry.counts['other'] = (entry.counts['other'] || 0) + 1;
+                }
+            } else {
+                const carKey = s.carrier && s.carrier.trim() ? s.carrier.trim().toUpperCase() : 'UNKNOWN';
+                if (entry.counts[carKey] !== undefined) {
+                    entry.counts[carKey]++;
+                } else {
+                    entry.counts['UNKNOWN'] = (entry.counts['UNKNOWN'] || 0) + 1;
+                }
+            }
             entry.total++;
         });
         
@@ -164,37 +195,59 @@ export const DeliveriesView: React.FC<DeliveriesViewProps> = ({ shipments = [] }
                 const label = m.dateObj.toLocaleString('en-US', { month: 'long', year: 'numeric' });
                 const key = `${m.dateObj.getFullYear()}_${m.dateObj.getMonth()}`;
                 
-                // Filter the breakdown list based on the active warehouse category filter
-                const fullBreakdown = WAREHOUSE_CONFIGS.map(wh => {
-                    const count = m.counts[wh.key] || 0;
+                if (groupMode === 'warehouse') {
+                    const fullBreakdown = WAREHOUSE_CONFIGS.map(wh => {
+                        const count = m.counts[wh.key] || 0;
+                        return {
+                            ...wh,
+                            count,
+                            pct: m.total > 0 ? (count / m.total) * 100 : 0
+                        };
+                    });
+
+                    const filteredBreakdown = fullBreakdown.filter(wh => {
+                        if (warehouseTypeFilter === 'all') return true;
+                        return wh.type === warehouseTypeFilter;
+                    });
+
+                    const filteredTotal = filteredBreakdown.reduce((sum, item) => sum + item.count, 0);
+
                     return {
-                        ...wh,
-                        count,
-                        pct: m.total > 0 ? (count / m.total) * 100 : 0
+                        label,
+                        key,
+                        rawTotal: m.total,
+                        filteredTotal,
+                        breakdown: filteredBreakdown.map(item => ({
+                            ...item,
+                            subsetPct: filteredTotal > 0 ? (item.count / filteredTotal) * 100 : 0
+                        })).sort((a, b) => b.count - a.count)
                     };
-                });
+                } else {
+                    const fullBreakdown = carrierConfigs.map(car => {
+                        const count = m.counts[car.key] || 0;
+                        return {
+                            ...car,
+                            count,
+                            pct: m.total > 0 ? (count / m.total) * 100 : 0
+                        };
+                    });
 
-                // Recalculate total according to active filter if needed, but we keep actual raw total
-                const filteredBreakdown = fullBreakdown.filter(wh => {
-                    if (warehouseTypeFilter === 'all') return true;
-                    return wh.type === warehouseTypeFilter;
-                });
+                    const filteredBreakdown = fullBreakdown.filter(car => car.count > 0 || m.total === 0);
+                    const filteredTotal = filteredBreakdown.reduce((sum, item) => sum + item.count, 0);
 
-                const filteredTotal = filteredBreakdown.reduce((sum, item) => sum + item.count, 0);
-
-                return {
-                    label,
-                    key,
-                    rawTotal: m.total,
-                    filteredTotal,
-                    breakdown: filteredBreakdown.map(item => ({
-                        ...item,
-                        // recalculate percentages relative to the shown subset total
-                        subsetPct: filteredTotal > 0 ? (item.count / filteredTotal) * 100 : 0
-                    })).sort((a, b) => b.count - a.count) // sort by highest delivery count
-                };
+                    return {
+                        label,
+                        key,
+                        rawTotal: m.total,
+                        filteredTotal,
+                        breakdown: filteredBreakdown.map(item => ({
+                            ...item,
+                            subsetPct: filteredTotal > 0 ? (item.count / filteredTotal) * 100 : 0
+                        })).sort((a, b) => b.count - a.count)
+                    };
+                }
             });
-    }, [deliveredShipments, warehouseTypeFilter]);
+    }, [deliveredShipments, groupMode, warehouseTypeFilter, carrierConfigs]);
 
     // Totals for executive banner
     const totals = useMemo(() => {
@@ -203,33 +256,55 @@ export const DeliveriesView: React.FC<DeliveriesViewProps> = ({ shipments = [] }
         let bondedTotal = 0;
         let generalTotal = 0;
         
-        WAREHOUSE_CONFIGS.forEach(wh => {
-            t[wh.key] = 0;
-        });
-
-        dataByMonth.forEach(m => {
-            m.breakdown.forEach(item => {
-                t[item.key] += item.count;
-                if (item.type === 'bonded') bondedTotal += item.count;
-                else if (item.type === 'general') generalTotal += item.count;
+        if (groupMode === 'warehouse') {
+            WAREHOUSE_CONFIGS.forEach(wh => {
+                t[wh.key] = 0;
             });
-            all += m.filteredTotal;
-        });
+            dataByMonth.forEach(m => {
+                m.breakdown.forEach(item => {
+                    t[item.key] = (t[item.key] || 0) + item.count;
+                    if (item.type === 'bonded') bondedTotal += item.count;
+                    else if (item.type === 'general') generalTotal += item.count;
+                });
+                all += m.filteredTotal;
+            });
 
-        return {
-            all,
-            bondedTotal,
-            generalTotal,
-            breakdown: WAREHOUSE_CONFIGS.map(wh => ({
-                ...wh,
-                count: t[wh.key] || 0,
-                pct: all > 0 ? ((t[wh.key] || 0) / all) * 100 : 0
-            })).filter(wh => {
-                if (warehouseTypeFilter === 'all') return true;
-                return wh.type === warehouseTypeFilter;
-            }).sort((a, b) => b.count - a.count)
-        };
-    }, [dataByMonth, warehouseTypeFilter]);
+            return {
+                all,
+                bondedTotal,
+                generalTotal,
+                breakdown: WAREHOUSE_CONFIGS.map(wh => ({
+                    ...wh,
+                    count: t[wh.key] || 0,
+                    pct: all > 0 ? ((t[wh.key] || 0) / all) * 100 : 0
+                })).filter(wh => {
+                    if (warehouseTypeFilter === 'all') return true;
+                    return wh.type === warehouseTypeFilter;
+                }).sort((a, b) => b.count - a.count)
+            };
+        } else {
+            carrierConfigs.forEach(car => {
+                t[car.key] = 0;
+            });
+            dataByMonth.forEach(m => {
+                m.breakdown.forEach(item => {
+                    t[item.key] = (t[item.key] || 0) + item.count;
+                });
+                all += m.filteredTotal;
+            });
+
+            return {
+                all,
+                bondedTotal: 0,
+                generalTotal: 0,
+                breakdown: carrierConfigs.map(car => ({
+                    ...car,
+                    count: t[car.key] || 0,
+                    pct: all > 0 ? ((t[car.key] || 0) / all) * 100 : 0
+                })).filter(car => car.count > 0).sort((a, b) => b.count - a.count)
+            };
+        }
+    }, [dataByMonth, groupMode, warehouseTypeFilter, carrierConfigs]);
 
     return (
         <motion.div 
@@ -256,52 +331,79 @@ export const DeliveriesView: React.FC<DeliveriesViewProps> = ({ shipments = [] }
                             Monthly Deliveries Distribution
                         </h2>
                         <p className="text-sm text-slate-400 max-w-2xl font-medium">
-                            Monthly overview of successfully delivered containers grouped by their actual completion date and final warehouse destinations.
+                            Monthly overview of successfully delivered containers grouped by their actual completion date, filtered by warehouse destinations or carrier transport companies.
                         </p>
-                    </div>
-
-                    <div className="flex shrink-0 gap-3">
-                        <button
-                            onClick={clearAllNotes}
-                            className="inline-flex items-center gap-2 px-5 py-3.5 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 hover:text-white rounded-2xl text-[10px] font-black uppercase tracking-widest border border-slate-700/50 hover:border-slate-600 transition-all cursor-pointer shadow-lg"
-                        >
-                            <Trash2 className="w-3.5 h-3.5" /> Clear All Notes
-                        </button>
                     </div>
                 </div>
 
-                {/* Segment Selector for Warehouse Categories */}
-                <div className="relative z-10 flex flex-wrap items-center gap-2 mt-8 bg-slate-900/50 p-2 rounded-2xl border border-slate-800/80 max-w-md">
-                    <button
-                        onClick={() => setWarehouseTypeFilter('all')}
-                        className={`flex-1 text-center py-2 px-4 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
-                            warehouseTypeFilter === 'all' 
-                                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20' 
-                                : 'text-slate-400 hover:text-slate-200'
-                        }`}
-                    >
-                        All ({totals.bondedTotal + totals.generalTotal})
-                    </button>
-                    <button
-                        onClick={() => setWarehouseTypeFilter('bonded')}
-                        className={`flex-1 text-center py-2 px-4 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
-                            warehouseTypeFilter === 'bonded' 
-                                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20' 
-                                : 'text-slate-400 hover:text-slate-200'
-                        }`}
-                    >
-                        Bonded ({totals.bondedTotal})
-                    </button>
-                    <button
-                        onClick={() => setWarehouseTypeFilter('general')}
-                        className={`flex-1 text-center py-2 px-4 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
-                            warehouseTypeFilter === 'general' 
-                                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20' 
-                                : 'text-slate-400 hover:text-slate-200'
-                        }`}
-                    >
-                        General ({totals.generalTotal})
-                    </button>
+                {/* Main Group Mode Selector & Sub Filter */}
+                <div className="relative z-10 flex flex-wrap items-center gap-4 mt-8">
+                    {/* View Mode Toggle: Warehouse vs. Transport Company */}
+                    <div className="flex items-center gap-1 p-1 bg-slate-900/60 rounded-2xl border border-slate-800/80 w-full sm:w-auto">
+                        <button
+                            onClick={() => setGroupMode('warehouse')}
+                            className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 py-2.5 px-5 rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-300 cursor-pointer ${
+                                groupMode === 'warehouse' 
+                                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30' 
+                                    : 'text-slate-400 hover:text-slate-200'
+                            }`}
+                        >
+                            <Layers className="w-3.5 h-3.5" /> Warehouse
+                        </button>
+                        <button
+                            onClick={() => setGroupMode('transport')}
+                            className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 py-2.5 px-5 rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-300 cursor-pointer ${
+                                groupMode === 'transport' 
+                                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30' 
+                                    : 'text-slate-400 hover:text-slate-200'
+                            }`}
+                        >
+                            <Truck className="w-3.5 h-3.5" /> Transport Company
+                        </button>
+                    </div>
+
+                    {/* Warehouse Sub-categories (All, Bonded, General) - ONLY shown in Warehouse mode */}
+                    <AnimatePresence mode="wait">
+                        {groupMode === 'warehouse' && (
+                            <motion.div 
+                                initial={{ opacity: 0, x: -10 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: -10 }}
+                                className="flex items-center gap-1 bg-slate-900/40 p-1 rounded-2xl border border-slate-800/50 w-full sm:w-auto"
+                            >
+                                <button
+                                    onClick={() => setWarehouseTypeFilter('all')}
+                                    className={`flex-1 sm:flex-initial text-center py-2 px-4 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                                        warehouseTypeFilter === 'all' 
+                                            ? 'bg-slate-800 text-white' 
+                                            : 'text-slate-400 hover:text-slate-200'
+                                    }`}
+                                >
+                                    All ({totals.bondedTotal + totals.generalTotal})
+                                </button>
+                                <button
+                                    onClick={() => setWarehouseTypeFilter('bonded')}
+                                    className={`flex-1 sm:flex-initial text-center py-2 px-4 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                                        warehouseTypeFilter === 'bonded' 
+                                            ? 'bg-slate-800 text-white' 
+                                            : 'text-slate-400 hover:text-slate-200'
+                                    }`}
+                                >
+                                    Bonded ({totals.bondedTotal})
+                                </button>
+                                <button
+                                    onClick={() => setWarehouseTypeFilter('general')}
+                                    className={`flex-1 sm:flex-initial text-center py-2 px-4 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                                        warehouseTypeFilter === 'general' 
+                                            ? 'bg-slate-800 text-white' 
+                                            : 'text-slate-400 hover:text-slate-200'
+                                    }`}
+                                >
+                                    General ({totals.generalTotal})
+                                </button>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
                 </div>
 
                 {/* Executive Totals */}
@@ -312,11 +414,11 @@ export const DeliveriesView: React.FC<DeliveriesViewProps> = ({ shipments = [] }
                             {totals.all} <span className="text-xs text-slate-500 font-bold">CNTR</span>
                         </div>
                     </div>
-                    {totals.breakdown.slice(0, 5).map((wh) => (
-                        <div key={wh.key} className={`bg-slate-850 border border-slate-700/40 rounded-2xl p-4 border-t-2 ${wh.border} shadow-inner`}>
-                            <span className="text-[10px] font-black text-slate-300 uppercase tracking-wide block mb-1 truncate">{wh.name}</span>
+                    {totals.breakdown.slice(0, 5).map((item) => (
+                        <div key={item.key} className={`bg-slate-850 border border-slate-700/40 rounded-2xl p-4 border-t-2 ${item.border} shadow-inner`}>
+                            <span className="text-[10px] font-black text-slate-300 uppercase tracking-wide block mb-1 truncate">{item.name}</span>
                             <div className="text-xl font-display font-black text-white">
-                                {wh.count} <span className="text-[10px] text-slate-500 font-bold">({wh.pct.toFixed(1)}%)</span>
+                                {item.count} <span className="text-[10px] text-slate-500 font-bold">({item.pct.toFixed(1)}%)</span>
                             </div>
                         </div>
                     ))}
@@ -395,45 +497,26 @@ export const DeliveriesView: React.FC<DeliveriesViewProps> = ({ shipments = [] }
                             </div>
 
                             {/* Bar Charts */}
-                            <div className="space-y-3.5 mb-8 flex-1">
-                                {month.breakdown.filter(wh => wh.count > 0).map((wh) => (
-                                    <div key={wh.key} className="relative">
+                            <div className="space-y-3.5 flex-1">
+                                {month.breakdown.filter(item => item.count > 0).map((item) => (
+                                    <div key={item.key} className="relative">
                                         <div className="flex justify-between text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1.5">
-                                            <span className="truncate max-w-[150px]">{wh.name}</span>
-                                            <span className="text-slate-700 font-bold">{wh.count} cont. ({wh.subsetPct.toFixed(1)}%)</span>
+                                            <span className="truncate max-w-[150px]">{item.name}</span>
+                                            <span className="text-slate-700 font-bold">{item.count} cont. ({item.subsetPct.toFixed(1)}%)</span>
                                         </div>
-                                        <div className={`w-full h-2.5 rounded-full ${wh.bg} overflow-hidden flex`}>
+                                        <div className={`w-full h-2.5 rounded-full ${item.bg} overflow-hidden flex`}>
                                             <motion.div 
                                                 initial={{ width: 0 }}
-                                                animate={{ width: `${wh.subsetPct}%` }}
+                                                animate={{ width: `${item.subsetPct}%` }}
                                                 transition={{ duration: 1, ease: "easeOut" }}
-                                                className={`h-full ${wh.color} rounded-full`}
+                                                className={`h-full ${item.color} rounded-full`}
                                             />
                                         </div>
                                     </div>
                                 ))}
-                                {month.breakdown.filter(wh => wh.count > 0).length === 0 && (
+                                {month.breakdown.filter(item => item.count > 0).length === 0 && (
                                     <p className="text-slate-400 text-xs italic py-4 text-center">No matching active allocations.</p>
                                 )}
-                            </div>
-
-                            {/* Justification Box */}
-                            <div className="mt-auto pt-4 border-t border-slate-100">
-                                <label className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">
-                                    <FileText className="w-3.5 h-3.5" /> Motivo da Utilização / Justificativa Diretoria
-                                </label>
-                                <textarea
-                                    value={justifications[month.key] || ''}
-                                    onChange={(e) => updateJustification(month.key, e.target.value)}
-                                    placeholder="Enter strategic justification or board notes here..."
-                                    className="w-full bg-slate-50 hover:bg-slate-100 focus:bg-white border border-slate-200 focus:border-indigo-400 rounded-2xl p-4 text-xs text-slate-700 font-medium leading-relaxed outline-none transition-all resize-none shadow-inner"
-                                    rows={4}
-                                />
-                                <div className="flex justify-end mt-2">
-                                    <span className="text-[9px] font-bold text-slate-400 uppercase flex items-center gap-1">
-                                        <Save className="w-3 h-3" /> Auto-saved locally
-                                    </span>
-                                </div>
                             </div>
                         </div>
                     ))
