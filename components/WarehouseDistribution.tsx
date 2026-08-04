@@ -151,7 +151,7 @@ export const WarehouseDistribution: React.FC<WarehouseDistributionProps> = ({ sh
             className="space-y-8 pb-24 w-full"
         >
             {/* Executive Banner */}
-            <div className="glass p-8 md:p-10 rounded-[3rem] ring-1 ring-white/40 shadow-glass bg-gradient-to-br from-indigo-900 via-slate-900 to-slate-900 text-white relative overflow-hidden">
+            <div className="p-8 md:p-10 rounded-[3rem] ring-1 ring-white/10 shadow-2xl bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 text-white relative overflow-hidden">
                 <div className="absolute -right-10 -bottom-10 opacity-10">
                     <span className="material-icons text-[15rem] font-black w-24 h-24">domain</span>
                 </div>

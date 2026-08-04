@@ -202,7 +202,7 @@ export const GeneralWarehouseDistribution: React.FC<GeneralWarehouseDistribution
             className="space-y-8 flex-1 min-h-[500px]"
         >
             {/* Header Banner */}
-            <div className="glass p-8 md:p-10 rounded-[3rem] bg-slate-900 text-white relative overflow-hidden shadow-2xl">
+            <div className="p-8 md:p-10 rounded-[3rem] bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 text-white relative overflow-hidden ring-1 ring-white/10 shadow-2xl">
                 <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-600/10 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
                 <div className="absolute bottom-0 left-0 w-80 h-80 bg-blue-600/10 rounded-full blur-3xl -ml-20 -mb-20 pointer-events-none" />
                 

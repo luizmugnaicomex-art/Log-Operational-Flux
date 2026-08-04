@@ -111,7 +111,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
                                 <span className="font-extrabold border-l-4 pl-3 tracking-tight" style={{ borderColor: p.color, color: 'rgba(255,255,255,0.7)' }}>{p.name}:</span>
                                 <span className="font-black text-sm" style={{ color: p.color }}>{p.formatter ? p.formatter(p.value) : p.value}</span>
                             </p>
-                            {isGoalChart && p.name === "Arrivals (Delivered)" && (
+                            {isGoalChart && p.name === "Delivered Containers" && (
                                 <div className="mt-1.5 text-[9px] font-black uppercase tracking-[0.2em] text-white/40">
                                    {p.payload.isWeekend ? 'Weekend Cycle' : p.payload.goalReached ? 'Performance Target Hit' : 'Under Target Capacity'}
                                 </div>
@@ -217,6 +217,7 @@ const getISOWeek = (date: Date) => {
 
 const ChartsGrid: React.FC<ChartsGridProps> = ({ 
     data, 
+    shipments = [],
     onLeadTimeClick, 
     onCargoReadyClick, 
     onAtaClick, 
@@ -232,6 +233,11 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
     const [cargoReadyViewMode, setCargoReadyViewMode] = useState<'days' | 'weeks'>('days');
     const [inventoryUnit, setInventoryUnit] = useState<'containers' | 'bls'>('containers');
     const [inventoryOnly, setInventoryOnly] = useState<boolean>(false);
+
+    const totalDeliveredCount = useMemo(() => {
+        if (!shipments) return 0;
+        return shipments.filter(s => s && s.deliveryByd !== null && s.deliveryByd !== undefined).length;
+    }, [shipments]);
 
     const averageDailyVolume = useMemo(() => {
         if (!data?.leadTimeTrend || data.leadTimeTrend.length === 0) return 0;
@@ -618,7 +624,7 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                         <ReferenceLine y={300} stroke="#EF4444" strokeDasharray="3 3" strokeWidth={2.5}>
                             <Label value="Challenge: 300" position="left" fill="#EF4444" fontSize={labelSize} fontWeight={900} />
                         </ReferenceLine>
-                        <Bar dataKey="containerCount" name="Arrivals (Delivered)" cursor="pointer" radius={[6, 6, 0, 0]}>
+                        <Bar dataKey="containerCount" name="Delivered Containers" cursor="pointer" radius={[6, 6, 0, 0]}>
                             <LabelList dataKey="containerCount" position="top" fontSize={labelSize} fill="#1e293b" fontWeight={900} />
                             {(data?.leadTimeTrend || []).map((entry, index) => {
                                 let fill = '#94a3b8';
@@ -1159,6 +1165,10 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                             <span className="text-[9px] font-black uppercase text-indigo-600">DAILY AVG:</span>
                             <span className="text-xs font-black text-slate-800">{averageDailyVolume} CNTR/day</span>
                         </div>
+                        <div className="bg-emerald-50/85 px-3 py-1 rounded-xl border border-emerald-100 flex items-center gap-1.5 shadow-sm">
+                            <span className="text-[9px] font-black uppercase text-emerald-600">TOTAL DELIVERED:</span>
+                            <span className="text-xs font-black text-slate-800">{totalDeliveredCount} CNTR</span>
+                        </div>
                         <div className="flex gap-2">
                             <span className="flex items-center gap-1 text-[9px] font-black uppercase text-emerald-500"><span className="w-2 h-2 rounded-full bg-emerald-500"></span> Met</span>
                             <span className="flex items-center gap-1 text-[9px] font-black uppercase text-slate-400"><span className="w-2 h-2 rounded-full bg-slate-400"></span> Missed</span>
@@ -1458,9 +1468,15 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                                     </div>
                                 )}
                                 {maximizedChart === 'daily_volume' && (
-                                    <div className="bg-indigo-50/80 px-4 py-2 rounded-xl border border-indigo-100 flex items-center gap-2">
-                                        <span className="text-[10px] font-black uppercase text-indigo-600">DAILY AVG:</span>
-                                        <span className="text-sm font-black text-slate-800">{averageDailyVolume} CNTR/day</span>
+                                    <div className="flex gap-4">
+                                        <div className="bg-indigo-50/80 px-4 py-2 rounded-xl border border-indigo-100 flex items-center gap-2">
+                                            <span className="text-[10px] font-black uppercase text-indigo-600">DAILY AVG:</span>
+                                            <span className="text-sm font-black text-slate-800">{averageDailyVolume} CNTR/day</span>
+                                        </div>
+                                        <div className="bg-emerald-50/80 px-4 py-2 rounded-xl border border-emerald-100 flex items-center gap-2">
+                                            <span className="text-[10px] font-black uppercase text-emerald-600">TOTAL DELIVERED:</span>
+                                            <span className="text-sm font-black text-slate-800">{totalDeliveredCount} CNTR</span>
+                                        </div>
                                     </div>
                                 )}
                                 {maximizedChart === 'daily_warehouse_picked' && renderWarehouseStats()}
