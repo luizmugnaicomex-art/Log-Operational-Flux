@@ -1342,17 +1342,7 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                 </ChartContainer>
             </div>
 
-            {/* Secondary Charts */}
-            <div className="export-section lg:col-span-2">
-                <ChartContainer
-                    title={getChartMeta('delay_distribution').title}
-                    subtitle={getChartMeta('delay_distribution').subtitle}
-                    height={350}
-                    onMaximize={() => setMaximizedChart('delay_distribution')}
-                >
-                    {renderChartContent('delay_distribution')}
-                </ChartContainer>
-            </div>
+
 
             <div className="export-section lg:col-span-2">
                 <ChartContainer
@@ -1366,28 +1356,9 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                 </ChartContainer>
             </div>
 
-            <div className="export-section lg:col-span-2">
-                <ChartContainer 
-                    title={getChartMeta('terminal_capacity').title} 
-                    subtitle={getChartMeta('terminal_capacity').subtitle}
-                    height={400}
-                    onMaximize={() => setMaximizedChart('terminal_capacity')}
-                >
-                    {renderChartContent('terminal_capacity')}
-                </ChartContainer>
-            </div>
 
-            {/* New Flow Chart */}
-            <div className="export-section lg:col-span-2">
-                <ChartContainer 
-                    title={getChartMeta('bonded_flow').title} 
-                    subtitle={getChartMeta('bonded_flow').subtitle}
-                    height={400}
-                    onMaximize={() => setMaximizedChart('bonded_flow')}
-                >
-                    {renderChartContent('bonded_flow')}
-                </ChartContainer>
-            </div>
+
+
 
             {/* Arrived Not Picked Chart */}
             <div className="export-section lg:col-span-2">
@@ -1401,16 +1372,7 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                 </ChartContainer>
             </div>
 
-            <div className="export-section lg:col-span-2">
-                <ChartContainer 
-                    title={getChartMeta('carrier_leadtime').title} 
-                    subtitle={getChartMeta('carrier_leadtime').subtitle}
-                    height={350}
-                    onMaximize={() => setMaximizedChart('carrier_leadtime')}
-                >
-                    {renderChartContent('carrier_leadtime')}
-                </ChartContainer>
-            </div>
+
 
             <div className="export-section lg:col-span-2">
                 <ChartContainer 

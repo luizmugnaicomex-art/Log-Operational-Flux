@@ -12,13 +12,11 @@ import OperationalLotGrid from "./components/OperationalLotGrid";
 import PipelineAnalysis from "./components/PipelineAnalysis";
 import GoodsAnalysis from "./components/GoodsAnalysis";
 import VesselMatrix from "./components/VesselMatrix";
-import { DemurrageControl } from "./components/DemurrageControl";
 import { CurrentInventory } from "./components/CurrentInventory";
 import { EmptyContainersPanel } from "./components/EmptyContainersPanel";
 import PortYardOperationStatus from "./components/PortYardOperationStatus";
-import { BacklogView } from "./components/BacklogView";
-import { WarehouseDistribution } from "./components/WarehouseDistribution";
 import { GeneralWarehouseDistribution } from "./components/GeneralWarehouseDistribution";
+import { WarehouseDistribution } from "./components/WarehouseDistribution";
 import { DeliveriesView } from "./components/DeliveriesView";
 
 // Utils
@@ -26,7 +24,7 @@ import { processRawData, calculateDashboardData, toUTC, getISOWeek } from "./uti
 import { currencyFormatter } from "./utils/formatters";
 import { Shipment, SortConfig, PipelineWeek } from "./types";
 
-type MainView = "performance" | "goods_analysis" | "current_inventory" | "vessel_matrix" | "demurrage_control" | "port_yard_status" | "backlog" | "warehouse_distribution" | "general_warehouse_distribution" | "deliveries";
+type MainView = "performance" | "goods_analysis" | "current_inventory" | "vessel_matrix" | "port_yard_status" | "warehouse_distribution" | "general_warehouse_distribution" | "deliveries";
 
 const isValidDate = (d: any): d is Date => d instanceof Date && !isNaN(d.getTime());
 
@@ -508,12 +506,10 @@ export default function App() {
                 { id: 'goods_analysis', label: 'Flow', icon: 'auto_graph' },
                 { id: 'current_inventory', label: 'Stock', icon: 'warehouse' },
                 { id: 'vessel_matrix', label: 'Maritime', icon: 'sailing' },
-                { id: 'demurrage_control', label: 'Chronos', icon: 'schedule' },
                 { id: 'port_yard_status', label: 'Port & Yard', icon: 'precision_manufacturing' },
                 { id: 'warehouse_distribution', label: 'Warehouse Dist', icon: 'domain' },
                 { id: 'general_warehouse_distribution', label: 'General Warehouse', icon: 'business' },
-                { id: 'deliveries', label: 'Deliveries', icon: 'local_shipping' },
-                { id: 'backlog', label: 'Backlog', icon: 'trending_up' }
+                { id: 'deliveries', label: 'Deliveries', icon: 'local_shipping' }
               ].map((item) => (
                 <button
                   key={item.id}
@@ -660,12 +656,7 @@ export default function App() {
                        </section>
                    </div>
 
-                   <section id="system-table" className="no-export scroll-mt-32">
-                      <ShipmentTable 
-                        shipments={paginatedShipments} sortConfig={sortConfig} onSort={setSortConfig} searchTerm={searchTerm} onSearch={setSearchTerm}
-                        currentPage={currentPage} totalItems={sortedShipments.length} itemsPerPage={itemsPerPage} onPageChange={setCurrentPage}
-                      />
-                   </section>
+
                 </div>
               )}
             </motion.div>
@@ -677,8 +668,6 @@ export default function App() {
           <div className="space-y-6 flex-1 min-h-[500px] flex flex-col">
             <VesselMatrix shipments={filteredShipments} />
           </div>
-        ) : mainView === "demurrage_control" ? (
-          <DemurrageControl shipments={filteredShipments} />
         ) : mainView === "port_yard_status" ? (
           <PortYardOperationStatus shipments={filteredShipments} />
         ) : mainView === "warehouse_distribution" ? (
@@ -687,8 +676,6 @@ export default function App() {
           <GeneralWarehouseDistribution shipments={filteredShipments} />
         ) : mainView === "deliveries" ? (
           <DeliveriesView shipments={filteredShipments} />
-        ) : mainView === "backlog" ? (
-          <BacklogView shipments={filteredShipments} />
         ) : null}
         </AnimatePresence>
       </main>
