@@ -835,15 +835,19 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                 );
             case 'monthly_trend':
                 return (
-                    <ComposedChart data={data?.monthlyTrend || []} margin={{ top: 20, right: 20, left: 10, bottom: 5 }}>
+                    <ComposedChart data={data?.monthlyTrend || []} margin={{ top: 35, right: 20, left: 10, bottom: 5 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
                         <XAxis dataKey="name" tick={{ fontSize: labelSize, fontWeight: 700, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
                         <YAxis yAxisId="left" tick={{ fontSize: labelSize, fontWeight: 700, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
                         <YAxis yAxisId="right" orientation="right" tick={{ fontSize: labelSize, fontWeight: 700, fill: '#DC2626' }} axisLine={false} tickLine={false} />
                         <Tooltip content={<CustomTooltip />} />
                         <Legend wrapperStyle={{ fontSize: labelSize, fontWeight: 800, textTransform: 'uppercase' }} />
-                        <Bar yAxisId="left" dataKey="value" name="Volume" fill="#2563EB" radius={[6,6,0,0]} />
-                        <Line yAxisId="right" type="monotone" dataKey="late" name="Late" stroke="#DC2626" strokeWidth={3} dot={{ r: 4, fill: '#DC2626', stroke: '#fff' }} />
+                        <Bar yAxisId="left" dataKey="value" name="Volume" fill="#2563EB" radius={[6,6,0,0]}>
+                            <LabelList dataKey="value" position="top" style={{ fontSize: labelSize + 1, fill: '#1e3a8a', fontWeight: 900 }} />
+                        </Bar>
+                        <Line yAxisId="right" type="monotone" dataKey="late" name="Late" stroke="#DC2626" strokeWidth={3} dot={{ r: 4, fill: '#DC2626', stroke: '#fff' }}>
+                            <LabelList dataKey="late" position="top" style={{ fontSize: labelSize + 1, fill: '#991b1b', fontWeight: 900 }} offset={10} />
+                        </Line>
                     </ComposedChart>
                 );
             case 'terminal_capacity':
