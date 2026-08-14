@@ -20,7 +20,7 @@ import { WarehouseDistribution } from "./components/WarehouseDistribution";
 import { DeliveriesView } from "./components/DeliveriesView";
 
 // Utils
-import { processRawData, calculateDashboardData, toUTC, getISOWeek } from "./utils/dataProcessor";
+import { processRawDataAsync, calculateDashboardData, toUTC, getISOWeek } from "./utils/dataProcessor";
 import { currencyFormatter } from "./utils/formatters";
 import { Shipment, SortConfig, PipelineWeek } from "./types";
 
@@ -84,12 +84,20 @@ export default function App() {
   });
 
   const [isLoading, setIsLoading] = useState(false);
+  const [loadingProgress, setLoadingProgress] = useState<{ percent: number; message: string }>({ percent: 0, message: "" });
   const [isExporting, setIsExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleFileUpload = React.useCallback((data: any[][]) => {
+  const handleFileUpload = React.useCallback(async (data: any[][]) => {
+    setIsLoading(true);
+    setLoadingProgress({ percent: 5, message: "Parsing spreadsheet structure..." });
+    setError(null);
+
     try {
-      const processed = processRawData(data);
+      const processed = await processRawDataAsync(data, (percent, message) => {
+        setLoadingProgress({ percent, message });
+      });
+
       setShipments(processed.shipments || []);
       setCarriersList(processed.carriers || []);
       setAnalystsList(processed.analysts || []);
@@ -101,9 +109,11 @@ export default function App() {
       setStatusComexList(processed.statusComexList || []);
       setGeneralWarehouseList(processed.generalWarehouseList || []);
       setIsLoading(false);
+      setLoadingProgress({ percent: 100, message: "Ready" });
       setError(null);
     } catch (err: any) {
-      setError(err.message);
+      console.error("Data processing error:", err);
+      setError(err.message || "Failed to process spreadsheet.");
       setIsLoading(false);
     }
   }, []);
@@ -688,6 +698,39 @@ export default function App() {
         avgDrainRate={parseFloat(kpis.avgWeekdayVolume) || 1}
         onClose={() => setModalData(d => ({...d, isOpen: false}))} 
       />
+
+      <AnimatePresence>
+        {isLoading && (
+          <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-md">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl border border-slate-100 flex flex-col items-center text-center"
+            >
+              <div className="w-16 h-16 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-5 animate-bounce">
+                <span className="material-icons text-3xl">cloud_sync</span>
+              </div>
+              <h3 className="text-xl font-display font-black text-slate-800">Processing Dataset</h3>
+              <p className="text-xs text-slate-500 font-medium mt-1 mb-6">
+                {loadingProgress.message || "Ingesting and calculating operational metrics..."}
+              </p>
+              
+              <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden p-0.5 mb-3 border border-slate-200/50">
+                <motion.div
+                  className="bg-gradient-to-r from-indigo-500 to-emerald-500 h-full rounded-full transition-all duration-300 ease-out"
+                  style={{ width: `${Math.max(5, loadingProgress.percent)}%` }}
+                />
+              </div>
+
+              <div className="flex justify-between w-full text-[10px] font-black uppercase tracking-wider text-slate-400">
+                <span>Optimized Engine</span>
+                <span className="text-indigo-600 font-bold">{loadingProgress.percent}%</span>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
       </div>
       {!isExporting && <EmptyContainersPanel isMinimized={isStoragePanelMinimized} onToggleMinimize={() => setIsStoragePanelMinimized(!isStoragePanelMinimized)} />}
       </div>

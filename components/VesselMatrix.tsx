@@ -723,12 +723,12 @@ const VesselMatrix: React.FC<VesselMatrixProps> = ({ shipments = [] }) => {
             
             <div className="overflow-y-auto p-12 flex-1 custom-scrollbar bg-slate-50/30">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                {matchingShipments.map((s, i) => (
+                {matchingShipments.slice(0, 120).map((s, i) => (
                   <motion.div 
                     key={i} 
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.03 }}
+                    transition={{ delay: Math.min(i * 0.01, 0.3) }}
                     className="glass border border-white p-8 rounded-[2.5rem] shadow-glass hover:ring-2 hover:ring-indigo-500/20 transition-all group"
                   >
                     <div className="flex justify-between items-start mb-6">
@@ -767,6 +767,11 @@ const VesselMatrix: React.FC<VesselMatrixProps> = ({ shipments = [] }) => {
                   </div>
                 )}
               </div>
+              {matchingShipments.length > 120 && (
+                <div className="mt-8 text-center text-xs font-black text-slate-400 uppercase tracking-widest">
+                  Showing top 120 of {matchingShipments.length.toLocaleString()} containers
+                </div>
+              )}
             </div>
             
             <div className="px-12 py-8 bg-white border-t border-slate-100 flex justify-end sticky bottom-0 z-10">

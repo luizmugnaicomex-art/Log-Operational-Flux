@@ -117,6 +117,366 @@ export const getWeekDateRangeStr = (week: number, year: number): string => {
     }
 };
 
+export const processRawDataAsync = async (
+    data: any[][], 
+    onProgress?: (progress: number, message: string) => void
+): Promise<{ shipments: Shipment[], carriers: string[], analysts: string[], cargos: string[], containerTypes: string[], incoterms: string[], romaneioStatuses: string[], years: number[], statusComexList: string[], generalWarehouseList: string[] }> => {
+    if (!Array.isArray(data) || data.length === 0) {
+        throw new Error("The uploaded spreadsheet is empty.");
+    }
+
+    if (onProgress) onProgress(5, "Scanning headers...");
+
+    const headerRow = data.find(row => {
+        if (!Array.isArray(row)) return false;
+        return row.some(cell => {
+            const val = String(cell || '').toUpperCase();
+            return val.includes("SHIPPER") || 
+                   val.includes("CONTAINER") || 
+                   val.includes("CONHECIMENTO") || 
+                   val.includes("BILL OF LADING") || 
+                   val.includes("ARMADOR") || 
+                   val.includes("VESSEL") || 
+                   val.includes("NAVIO") || 
+                   val.includes("DISCHARGE") || 
+                   val.includes("ANALISTA") || 
+                   val.includes("ANALYST") ||
+                   val.includes("LOADING TYPE") ||
+                   val.includes("TERMINAL") ||
+                   val.includes("BONDED WAREHOUSE") ||
+                   val.includes("LOT NUMBER") ||
+                   val.includes("BATCH") ||
+                   val.includes("FREE TIME");
+        });
+    });
+    if (!headerRow) throw new Error("Could not find a valid header row containing recognizable column names in the Excel file.");
+
+    const headers = headerRow.map(h => 
+        String(h || '')
+            .toUpperCase()
+            .replace(/\s+/g, ' ')
+            .trim()
+    );
+
+    const findHeaderIndex = (...possibleNames: string[]): number => {
+        for (const name of possibleNames) {
+            let index = headers.indexOf(name);
+            if (index !== -1) return index;
+            index = headers.findIndex(h => h === name);
+            if (index !== -1) return index;
+        }
+        return -1;
+    };
+
+    const indices = {
+        containerNumber: findHeaderIndex('CONTAINER ID', 'CONTAINER', 'CONTAINER NUMBER', 'CONTAINER NO', 'CNTR', 'CNTR NO', 'CNTRS ORIGINAL'),
+        billOfLading: findHeaderIndex('BL', 'BL NO', 'BL NUMBER', 'BILL OF LADING', 'CONHECIMENTO', 'BILL'),
+        lotNumber: findHeaderIndex('DI', 'DI NO', 'DI NUMBER', 'LOT', 'LOT NUMBER'),
+        batchNumber: findHeaderIndex('BATCH', 'BATCH NUMBER', 'LOT NO'),
+        cargoModelFirst: findHeaderIndex('TYPE OF CARGO'),
+        cargoModelFallback: findHeaderIndex('DESCRIPTION'),
+        shipper: findHeaderIndex('SHIPPER'),
+        shipowner: findHeaderIndex('SHIPOWNER', 'ARMADOR', 'SHIP OWNER', 'OWNER'), 
+        vesselName: findHeaderIndex('ARRIVAL VESSEL', 'VESSEL', 'VESSEL NAME', 'SHIP', 'NAVIO', 'MOTHER VESSEL'),
+        cargo: findHeaderIndex('TYPE OF CARGO', 'TIPO DE MERCADORIA', 'CARGO', 'COMMODITY', 'GOODS', 'PRODUCT', 'MATERIAL', 'MERCHANDISE', 'DESCRIPTION OF GOODS', 'MERCADORIA', 'TYPE OF MERCHANDISE'),
+        containerType: findHeaderIndex('LOADING TYPE', 'CONTAINER TYPE', 'TYPE', 'LOAD TYPE', 'FCL/LCL', 'SERVICE TYPE', 'TIPO', 'CARGO TYPE', 'TIPO DE CARGA'),
+        incoterm: findHeaderIndex('INCOTERM', 'TERM', 'INCOTERMS'),
+        bondedWarehouse: findHeaderIndex('TERMINAL', 'BONDED WAREHOUSE', 'ARMAZEM', 'DEPOT', 'LOCAL', 'RECINTO', 'PICK UP LOCATION', 'LOCAL DE RETIRADA', 'DESTINATION TERMINAL', 'ARMAZÉM'),
+        depot: findHeaderIndex('DEPOT', 'DEPOT RETURN', 'LOCAL DE DEVOLUÇÃO'),
+        ata: findHeaderIndex('ATA', 'ARRIVAL', 'DISCHARGE DATE', 'ACTUAL ETA', 'ETA', 'ARRIVAL DATE'),
+        deliveryByd: findHeaderIndex('DELIVERY DATE AT BYD', 'DELIVERY DATE', 'DATA ENTREGA', 'DELIVERED', 'ENTREGUE'),
+        estimatedDelivery: findHeaderIndex('ESTIMATED DELIVERY DATE', 'ESTIMATED DELIVERY'),
+        demurrageCost: findHeaderIndex('COST DEMURRAGE TOTAL', 'DEMURRAGE', 'DEMURRAGE COST'),
+        parametrization: findHeaderIndex('PARAMETRIZATION', 'CUSTOMS CHANNEL', 'CANAL'),
+        dateNF: findHeaderIndex('DATE NOTA FISCAL', 'DATE NF', 'DATA NF'),
+        unloadDate: findHeaderIndex('UNLOAD DATE', 'DATA DESOVA'),
+        carrier: findHeaderIndex('CARRIER', 'TRANSPORTADORA'),
+        analyst: findHeaderIndex('RESPONSIBLE ANALYST', 'ANALYST', 'ANALISTA', 'RESPONSIBLE'),
+        technicianResponsibleChinaTeam: findHeaderIndex('TECHNICIAN RESPONSIBLE - CHINA TEAM', 'TECHNICIAN RESPONSIBLE', 'TECHNICIAN'),
+        reference: findHeaderIndex('REFERENCE', 'REF'),
+        voyage: findHeaderIndex('VOYAGE', 'VIAGEM'),
+        cargoPresence: findHeaderIndex('CARGO PRESENCE', 'PRESENCE'),
+        operationScope: findHeaderIndex('OPERATION SCOPE', 'SCOPE'),
+        loadingDate: findHeaderIndex('LOADING DATE', 'DATA DE CARREGAMENTO'),
+        containerPuttedDownAtBydBuffer: findHeaderIndex('CONTAINER PUTTED DOWN AT BYD BUFFER', 'BUFFER PUT DOWN', 'PUT DOWN AT BUFFER'),
+        containerStatusAtBuffer: findHeaderIndex('CONTAINER STATUS AT BUFFER', 'BUFFER STATUS', 'STATUS AT BUFFER'),
+        emptyContainerReturnOperation: findHeaderIndex('EMPTY CONTAINER RETURN OPERATION', 'EMPTY RETURN OPERATION', 'EMPTY RETURN'),
+        cargoReadyDate: findHeaderIndex('CARGO READY (DATE)', 'CARGO READY DATE', 'CARGO READY'),
+        channelDate: findHeaderIndex('CHANNEL DATE', 'DATA CANAL'),
+        actualDepotReturnDate: findHeaderIndex('ACTUAL DEPOT RETURN DATE', 'ACTUAL RETURN', 'DEVOLUCAO VAZIO', 'DATA DEVOLUÇÃO'),
+        deadlineReturnDate: findHeaderIndex('(DESEMBARAÇO) DEADLINE RETURN CNTR', 'DEADLINE RETURN CNTR', 'DEADLINE RETURN', 'DEADLINE', 'PRAZO DEVOLUÇÃO', 'END OF FREE TIME'), 
+        estimatedDepotDate: findHeaderIndex('ESTIMATED DEPOT DATE', 'ESTIMATED RETURN'),
+        freeTimeDate: findHeaderIndex('FREE TIME', 'FREE DAYS', 'FREETIME', 'FREE_TIME', 'FREE TIME END', 'FREE TIME LIMIT', 'DT FREE TIME'),
+        totalCost: findHeaderIndex('TOTAL COST', 'TOTAL', 'TOTAL INTERNATIONAL COSTS'),
+        taxCost: findHeaderIndex('TOTAL TAXES', 'TAXES', 'TAX', 'IMPOSTOS'),
+        extraCost: findHeaderIndex('TOTAL EXTRA COSTS', 'EXTRA COSTS', 'EXTRA STORAGE'),
+        madeRomaneio: findHeaderIndex('MADE ROMANEIO', 'ROMANEIO', 'STATUS ROMANEIO'),
+        status: findHeaderIndex('STATUS', 'Status'),
+        statusComex: findHeaderIndex('STATUS (COMEX)', 'STATUS COMEX'),
+        generalWarehouse: findHeaderIndex('GENERAL WAREHOUSE', 'GENERAL WAREHOUSE'),
+    };
+
+    const carriers = new Set<string>();
+    const analysts = new Set<string>();
+    const cargos = new Set<string>();
+    const containerTypes = new Set<string>();
+    const incoterms = new Set<string>();
+    const romaneioStatuses = new Set<string>();
+    const statusComexSet = new Set<string>();
+    const generalWarehouseSet = new Set<string>();
+    
+    const currentYear = new Date().getFullYear();
+    const years = new Set<number>([currentYear]);
+    const seenContainers = new Set<string>();
+    const headerIndex = data.indexOf(headerRow);
+
+    const shipments: Shipment[] = [];
+    const rows = data.slice(headerIndex + 1);
+    const totalRows = rows.length;
+
+    const normalizeCache = new Map<string, string>();
+    const normalizeName = (name: string) => {
+        if (!name) return name;
+        if (normalizeCache.has(name)) return normalizeCache.get(name)!;
+        const res = name.replace(/[^\s-]+/g, (match) => {
+            const lower = match.toLowerCase();
+            if (lower === 'skd' || lower === 'ckd' || lower === 'cbu' || lower === 'byd' || lower === 'phev' || lower === 'ev') return match.toUpperCase();
+            return match.charAt(0).toUpperCase() + match.slice(1).toLowerCase();
+        });
+        normalizeCache.set(name, res);
+        return res;
+    };
+
+    const todayDate = new Date();
+    const todayUTC = toUTC(todayDate);
+    const CHUNK_SIZE = 2500;
+
+    for (let r = 0; r < totalRows; r++) {
+        // Yield to event loop every CHUNK_SIZE rows to keep browser responsive
+        if (r > 0 && r % CHUNK_SIZE === 0) {
+            if (onProgress) {
+                const percent = Math.min(95, Math.round(10 + (r / totalRows) * 80));
+                onProgress(percent, `Processing container ${r.toLocaleString()} of ${totalRows.toLocaleString()}...`);
+            }
+            await new Promise(resolve => setTimeout(resolve, 0));
+        }
+
+        const row = rows[r];
+        if (!Array.isArray(row) || row.length === 0) continue;
+        
+        const containerNumber = indices.containerNumber !== -1 ? String(row[indices.containerNumber] || '').trim() : '';
+        const shipperRaw = indices.shipper !== -1 ? row[indices.shipper] : '';
+        
+        if (!containerNumber && !shipperRaw) continue;
+
+        if (containerNumber && seenContainers.has(containerNumber)) {
+            continue;
+        }
+        if (containerNumber) {
+            seenContainers.add(containerNumber);
+        }
+
+        const billOfLading = indices.billOfLading !== -1 ? String(row[indices.billOfLading] || '').trim() : 'N/A';
+
+        const ataDate = indices.ata !== -1 ? parseDate(row[indices.ata]) : null;
+        if (ataDate) years.add(ataDate.getFullYear());
+
+        const deliveryBydDate = indices.deliveryByd !== -1 ? parseDate(row[indices.deliveryByd]) : null;
+        if (deliveryBydDate) years.add(deliveryBydDate.getFullYear());
+
+        const estimatedDeliveryDate = indices.estimatedDelivery !== -1 ? parseDate(row[indices.estimatedDelivery]) : null;
+        const dateNFDate = indices.dateNF !== -1 ? parseDate(row[indices.dateNF]) : null;
+        const cargoReadyDate = indices.cargoReadyDate !== -1 ? parseDate(row[indices.cargoReadyDate]) : null;
+        const channelDate = indices.channelDate !== -1 ? parseDate(row[indices.channelDate]) : null;
+        const unloadDate = indices.unloadDate !== -1 ? parseDate(row[indices.unloadDate]) : null;
+        const actualDepotReturnDate = indices.actualDepotReturnDate !== -1 ? parseDate(row[indices.actualDepotReturnDate]) : null;
+        const estimatedDepotDate = indices.estimatedDepotDate !== -1 ? parseDate(row[indices.estimatedDepotDate]) : null;
+
+        let deadlineReturnDate = indices.deadlineReturnDate !== -1 ? parseDate(row[indices.deadlineReturnDate]) : null;
+        const rawFreeTime = indices.freeTimeDate !== -1 ? row[indices.freeTimeDate] : undefined;
+        
+        if (!deadlineReturnDate && ataDate && rawFreeTime != null) {
+             const parsedNum = parseInt(String(rawFreeTime), 10);
+             if (!isNaN(parsedNum)) {
+                 const computedDeadline = new Date(ataDate);
+                 computedDeadline.setDate(computedDeadline.getDate() + parsedNum);
+                 deadlineReturnDate = isValidDate(computedDeadline) ? computedDeadline : null;
+             }
+        }
+        
+        const freeTimeDate = deadlineReturnDate; 
+
+        let shipowner = indices.shipowner !== -1 ? String(row[indices.shipowner] || '').trim().toUpperCase() : '';
+        if (shipowner === 'CSSC') shipowner = 'COSCO';
+
+        let carrierRaw = String(indices.carrier !== -1 ? row[indices.carrier] || 'Unknown' : 'Unknown');
+        if (carrierRaw.trim().toUpperCase() === 'CSSC') carrierRaw = 'COSCO';
+        const carrier = (carrierRaw === 'Unknown' || carrierRaw === '') ? 'Unknown' : carrierRaw;
+
+        const analyst = String(indices.analyst !== -1 ? row[indices.analyst] || 'Unknown' : 'Unknown');
+        const technicianResponsibleChinaTeam = indices.technicianResponsibleChinaTeam !== -1 ? String(row[indices.technicianResponsibleChinaTeam] || '').trim() : undefined;
+        const reference = indices.reference !== -1 ? String(row[indices.reference] || '').trim() : undefined;
+        const voyage = indices.voyage !== -1 ? String(row[indices.voyage] || '').trim() : undefined;
+        const cargoPresence = indices.cargoPresence !== -1 ? String(row[indices.cargoPresence] || '').trim() : undefined;
+        const operationScope = indices.operationScope !== -1 ? String(row[indices.operationScope] || '').trim() : undefined;
+        const loadingDate = indices.loadingDate !== -1 ? parseDate(row[indices.loadingDate]) : null;
+        const containerPuttedDownAtBydBuffer = indices.containerPuttedDownAtBydBuffer !== -1 ? parseDate(row[indices.containerPuttedDownAtBydBuffer]) : null;
+        const containerStatusAtBuffer = indices.containerStatusAtBuffer !== -1 ? String(row[indices.containerStatusAtBuffer] || '').trim() : undefined;
+        const emptyContainerReturnOperation = indices.emptyContainerReturnOperation !== -1 ? String(row[indices.emptyContainerReturnOperation] || '').trim() : undefined;
+
+        const cargoParam = indices.cargo !== -1 ? String(row[indices.cargo] || '').trim() : '';
+        const cargo = normalizeName(cargoParam);
+        
+        const cargoTypeStr = indices.cargoModelFirst !== -1 ? String(row[indices.cargoModelFirst] || '').trim() : '';
+        const cargoDescStr = indices.cargoModelFallback !== -1 ? String(row[indices.cargoModelFallback] || '').trim() : '';
+        let extractedModel = cargoTypeStr !== '' ? cargoTypeStr : (cargoDescStr !== '' ? cargoDescStr : 'Other');
+        extractedModel = normalizeName(extractedModel);
+
+        const vesselName = indices.vesselName !== -1 ? String(row[indices.vesselName] || '').trim() : '';
+        const containerType = indices.containerType !== -1 ? String(row[indices.containerType] || '').trim() : '';
+        const incoterm = indices.incoterm !== -1 ? String(row[indices.incoterm] || '').trim().toUpperCase() : '';
+        const madeRomaneio = indices.madeRomaneio !== -1 ? String(row[indices.madeRomaneio] || 'NO').trim().toUpperCase() : 'NO';
+        const status = indices.status !== -1 ? String(row[indices.status] || '').trim() : '';
+        const statusComex = indices.statusComex !== -1 ? String(row[indices.statusComex] || '').trim() : '';
+        const generalWarehouse = indices.generalWarehouse !== -1 ? String(row[indices.generalWarehouse] || '').trim() : '';
+        
+        let bondedWarehouse = indices.bondedWarehouse !== -1 ? String(row[indices.bondedWarehouse] || 'Unknown').trim() : 'Unknown';
+        if (bondedWarehouse === '') bondedWarehouse = 'Unknown';
+
+        const bwUpper = bondedWarehouse.toUpperCase();
+        if (bwUpper.includes('TECON') || bwUpper.includes('WILSON') || bwUpper.includes('TECOM')) {
+            bondedWarehouse = 'TECON';
+        } else if (bwUpper.includes('INTERMARITIMA') || bwUpper.includes('INTERMAR') || bwUpper.includes('INTER ARCO')) {
+            bondedWarehouse = 'INTERMARITIMA';
+        } else if (bwUpper.includes('TPC')) {
+            bondedWarehouse = 'TPC';
+        } else if (bwUpper.includes('EMPORIO') || bwUpper.includes('CLIA')) {
+            bondedWarehouse = 'CLIA';
+        } else if (bwUpper.includes('AG') || bwUpper.includes('SEDEX') || bwUpper.includes('CDEX')) {
+            bondedWarehouse = 'AG - INTER CDEX';
+        } else if (bwUpper.includes('BUFFER') || bwUpper.includes('TERCAM')) {
+            bondedWarehouse = 'BUFFER - TERCAM';
+        }
+
+        let depot = indices.depot !== -1 ? String(row[indices.depot] || 'N/A').trim().toUpperCase() : 'N/A';
+        if (depot === "" || depot === "0") depot = 'N/A';
+
+        if (carrier !== 'Unknown') carriers.add(carrier);
+        if (analyst !== 'Unknown') analysts.add(analyst);
+        if (cargo) cargos.add(cargo);
+        if (containerType) containerTypes.add(containerType);
+        if (incoterm) incoterms.add(incoterm);
+        if (madeRomaneio) romaneioStatuses.add(madeRomaneio);
+        if (statusComex) statusComexSet.add(statusComex);
+        if (generalWarehouse) generalWarehouseSet.add(generalWarehouse);
+
+        const rawParam = String(indices.parametrization !== -1 ? row[indices.parametrization] || 'Unknown' : 'Unknown').trim();
+        const parametrization = rawParam.length > 0
+            ? rawParam.charAt(0).toUpperCase() + rawParam.slice(1).toLowerCase()
+            : 'Unknown';
+
+        const totalCostRaw = indices.totalCost !== -1 ? Number(row[indices.totalCost]) || 0 : 0;
+        const taxCostRaw = indices.taxCost !== -1 ? Number(row[indices.taxCost]) || 0 : 0;
+        const extraCostRaw = indices.extraCost !== -1 ? Number(row[indices.extraCost]) || 0 : 0;
+
+        let demurrageDays = 0;
+        let calculatedDemurrageCost = 0;
+
+        if (deadlineReturnDate) {
+            const deadlineUTC = toUTC(deadlineReturnDate);
+            const returnUTC = actualDepotReturnDate ? toUTC(actualDepotReturnDate) : null;
+            const effectiveDate = returnUTC || todayUTC;
+
+            if (effectiveDate > deadlineUTC) {
+                const diffTime = effectiveDate.getTime() - deadlineUTC.getTime();
+                demurrageDays = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+            }
+
+            if (demurrageDays > 0) {
+                const rate = DEMURRAGE_RATES[shipowner] || 0;
+                calculatedDemurrageCost = demurrageDays * rate;
+            }
+        }
+
+        const finalDemurrageCost = calculatedDemurrageCost > 0 
+            ? calculatedDemurrageCost 
+            : (indices.demurrageCost !== -1 ? Number(row[indices.demurrageCost]) || 0 : 0);
+
+        shipments.push({
+            containerNumber,
+            billOfLading,
+            lotNumber: indices.lotNumber !== -1 ? String(row[indices.lotNumber] || 'N/A').trim() : 'N/A',
+            batchNumber: indices.batchNumber !== -1 ? String(row[indices.batchNumber] || '0').trim() : '0',
+            cargoModel: extractedModel,
+            shipper: String(shipperRaw || 'Unknown Shipper'),
+            shipowner,
+            cargo,
+            vesselName,
+            containerType,
+            incoterm,
+            bondedWarehouse,
+            depot,
+            ata: ataDate,
+            deliveryByd: deliveryBydDate,
+            estimatedDelivery: estimatedDeliveryDate,
+            demurrageCost: finalDemurrageCost,
+            parametrization,
+            dateNF: dateNFDate,
+            unloadDate: unloadDate,
+            carrier,
+            analyst,
+            technicianResponsibleChinaTeam,
+            reference,
+            voyage,
+            cargoPresence,
+            operationScope,
+            loadingDate,
+            containerPuttedDownAtBydBuffer,
+            containerStatusAtBuffer,
+            emptyContainerReturnOperation,
+            cargoReadyDate: cargoReadyDate,
+            channelDate: channelDate,
+            actualDepotReturnDate: actualDepotReturnDate,
+            estimatedDepotDate: estimatedDepotDate,
+            freeTimeDate: freeTimeDate,
+            totalCost: totalCostRaw,
+            taxCost: taxCostRaw,
+            extraCost: extraCostRaw,
+            portToDelivery: dateDiffInDays(ataDate, deliveryBydDate),
+            clientDeliveryVariance: dateDiffInDays(estimatedDeliveryDate, deliveryBydDate),
+            totalClearanceTime: dateDiffInDays(ataDate, dateNFDate),
+            ataToChannelTime: dateDiffInDays(ataDate, channelDate),
+            channelToNfTime: dateDiffInDays(channelDate, dateNFDate),
+            customsProcessTime: dateDiffInDays(cargoReadyDate, dateNFDate),
+            portToCustomsTime: dateDiffInDays(ataDate, cargoReadyDate),
+            transportDeliveryTime: dateDiffInDays(cargoReadyDate, deliveryBydDate),
+            containerStreetTurnTime: dateDiffInDays(deliveryBydDate, actualDepotReturnDate),
+            depotReturnVariance: dateDiffInDays(estimatedDepotDate, actualDepotReturnDate),
+            detentionRisk: demurrageDays, 
+            portToCargoReady: dateDiffInDays(ataDate, cargoReadyDate),
+            madeRomaneio,
+            status,
+            statusComex,
+            generalWarehouse,
+        });
+    }
+
+    if (onProgress) onProgress(98, "Finalizing container normalization...");
+
+    return { 
+        shipments, 
+        carriers: [...carriers].sort(), 
+        analysts: [...analysts].sort(), 
+        cargos: [...cargos].sort(), 
+        containerTypes: [...containerTypes].sort(),
+        incoterms: [...incoterms].sort(),
+        romaneioStatuses: [...romaneioStatuses].sort(),
+        years: [...years].sort((a,b) => b-a),
+        statusComexList: [...statusComexSet].sort(),
+        generalWarehouseList: [...generalWarehouseSet].sort()
+    };
+};
+
 export const processRawData = (data: any[][]): { shipments: Shipment[], carriers: string[], analysts: string[], cargos: string[], containerTypes: string[], incoterms: string[], romaneioStatuses: string[], years: number[], statusComexList: string[], generalWarehouseList: string[] } => {
     if (!Array.isArray(data) || data.length === 0) {
         throw new Error("The uploaded spreadsheet is empty.");
@@ -220,12 +580,29 @@ export const processRawData = (data: any[][]): { shipments: Shipment[], carriers
     const statusComexSet = new Set<string>();
     const generalWarehouseSet = new Set<string>();
     
-    const years = new Set<number>([new Date().getFullYear()]);
+    const currentYear = new Date().getFullYear();
+    const years = new Set<number>([currentYear]);
     const seenContainers = new Set<string>();
     const headerIndex = data.indexOf(headerRow);
 
     const shipments: Shipment[] = [];
     const rows = data.slice(headerIndex + 1);
+
+    const normalizeCache = new Map<string, string>();
+    const normalizeName = (name: string) => {
+        if (!name) return name;
+        if (normalizeCache.has(name)) return normalizeCache.get(name)!;
+        const res = name.replace(/[^\s-]+/g, (match) => {
+            const lower = match.toLowerCase();
+            if (lower === 'skd' || lower === 'ckd' || lower === 'cbu' || lower === 'byd' || lower === 'phev' || lower === 'ev') return match.toUpperCase();
+            return match.charAt(0).toUpperCase() + match.slice(1).toLowerCase();
+        });
+        normalizeCache.set(name, res);
+        return res;
+    };
+
+    const todayDate = new Date();
+    const todayUTC = toUTC(todayDate);
     
     for (let r = 0; r < rows.length; r++) {
         const row = rows[r];
@@ -234,7 +611,6 @@ export const processRawData = (data: any[][]): { shipments: Shipment[], carriers
         const containerNumber = indices.containerNumber !== -1 ? String(row[indices.containerNumber] || '').trim() : '';
         const shipperRaw = indices.shipper !== -1 ? row[indices.shipper] : '';
         
-        // Skip completely empty rows or rows missing both a container number and shipper
         if (!containerNumber && !shipperRaw) continue;
 
         if (containerNumber && seenContainers.has(containerNumber)) {
@@ -246,7 +622,6 @@ export const processRawData = (data: any[][]): { shipments: Shipment[], carriers
 
         const billOfLading = indices.billOfLading !== -1 ? String(row[indices.billOfLading] || '').trim() : 'N/A';
 
-        // Parse each date exactly once
         const ataDate = indices.ata !== -1 ? parseDate(row[indices.ata]) : null;
         if (ataDate) years.add(ataDate.getFullYear());
 
@@ -292,15 +667,6 @@ export const processRawData = (data: any[][]): { shipments: Shipment[], carriers
         const containerPuttedDownAtBydBuffer = indices.containerPuttedDownAtBydBuffer !== -1 ? parseDate(row[indices.containerPuttedDownAtBydBuffer]) : null;
         const containerStatusAtBuffer = indices.containerStatusAtBuffer !== -1 ? String(row[indices.containerStatusAtBuffer] || '').trim() : undefined;
         const emptyContainerReturnOperation = indices.emptyContainerReturnOperation !== -1 ? String(row[indices.emptyContainerReturnOperation] || '').trim() : undefined;
-
-        const normalizeName = (name: string) => {
-            if (!name) return name;
-            return name.replace(/[^\s-]+/g, (match) => {
-                const lower = match.toLowerCase();
-                if (lower === 'skd' || lower === 'ckd' || lower === 'cbu' || lower === 'byd' || lower === 'phev' || lower === 'ev') return match.toUpperCase();
-                return match.charAt(0).toUpperCase() + match.slice(1).toLowerCase();
-            });
-        };
 
         const cargoParam = indices.cargo !== -1 ? String(row[indices.cargo] || '').trim() : '';
         const cargo = normalizeName(cargoParam);
@@ -363,7 +729,6 @@ export const processRawData = (data: any[][]): { shipments: Shipment[], carriers
         if (deadlineReturnDate) {
             const deadlineUTC = toUTC(deadlineReturnDate);
             const returnUTC = actualDepotReturnDate ? toUTC(actualDepotReturnDate) : null;
-            const todayUTC = toUTC(new Date());
             const effectiveDate = returnUTC || todayUTC;
 
             if (effectiveDate > deadlineUTC) {
@@ -1006,6 +1371,48 @@ export const calculateDashboardData = (shipments: Shipment[]): { kpis: KpiData, 
 
     const depotDistribution = aggregateBy('depot', () => 1, vals => vals.length).sort((a,b) => b.value - a.value);
 
+    const warehouseStats: Record<string, { total: number; placed: number; picked: number; arrived: number; unloaded: number }> = {};
+    const carrierDeliveredVolume: Record<string, number> = {};
+
+    shipments.forEach(s => {
+        if (!s) return;
+        const bw = s.bondedWarehouse || 'Unknown';
+        if (!warehouseStats[bw]) {
+            warehouseStats[bw] = { total: 0, placed: 0, picked: 0, arrived: 0, unloaded: 0 };
+        }
+        warehouseStats[bw].total++;
+        if (s.ata) warehouseStats[bw].placed++;
+        if (s.deliveryByd) {
+            warehouseStats[bw].picked++;
+            const c = s.carrier || 'Unknown';
+            carrierDeliveredVolume[c] = (carrierDeliveredVolume[c] || 0) + 1;
+        }
+        if (s.estimatedDelivery) warehouseStats[bw].arrived++;
+        if (s.unloadDate) warehouseStats[bw].unloaded++;
+    });
+
+    const warehouseVolume = Object.entries(warehouseStats).map(([name, stats]) => ({
+        name,
+        value: stats.total,
+        capacity: WAREHOUSE_CAPACITIES[name] || 0,
+        arrived: stats.arrived
+    })).sort((a, b) => b.value - a.value);
+
+    const unloadedByWarehouse = Object.entries(warehouseStats).filter(([_, stats]) => stats.unloaded > 0).map(([name, stats]) => ({
+        name,
+        value: stats.unloaded,
+        capacity: WAREHOUSE_CAPACITIES[name] || 0
+    })).sort((a, b) => b.value - a.value);
+
+    const bondedFlow = Object.entries(warehouseStats).map(([name, stats]) => ({
+        name,
+        placed: stats.placed,
+        picked: stats.picked,
+        arrived: stats.arrived
+    })).sort((a, b) => b.placed - a.placed);
+
+    const carrierVolume = Object.entries(carrierDeliveredVolume).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
+
     const charts: ChartData = {
         pipeline,
         leadTimeTrend,
@@ -1050,20 +1457,10 @@ export const calculateDashboardData = (shipments: Shipment[]): { kpis: KpiData, 
         streetTurnByCarrier: aggregateBy('carrier', s => s.containerStreetTurnTime, vals => avg(vals as number[])).map(d => ({name: d.name, avgTime: d.value})).sort((a, b) => a.avgTime - b.avgTime),
         portToCargoReadyByCarrier: aggregateBy('carrier', s => s.portToCargoReady, vals => avg(vals as number[])).map(d => ({name: d.name, avgTime: d.value})).sort((a, b) => a.avgTime - b.avgTime),
         deliveryVarianceByCarrier: aggregateBy('carrier', s => s.clientDeliveryVariance, vals => avg(vals as number[])).map(d => ({ name: d.name, avgVariance: d.value })).sort((a, b) => b.avgVariance - a.avgVariance),
-        carrierVolume: aggregateBy('carrier', s => s.deliveryByd ? 1 : null, vals => vals.length).sort((a, b) => b.value - a.value),
-        warehouseVolume: aggregateBy('bondedWarehouse', s => 1, vals => vals.length).map(d => ({ 
-            name: d.name, 
-            value: d.value, 
-            capacity: WAREHOUSE_CAPACITIES[d.name] || 0,
-            arrived: shipments.filter(s => s && s.bondedWarehouse === d.name && s.estimatedDelivery).length
-        })).sort((a, b) => b.value - a.value),
-        unloadedByWarehouse: aggregateBy('bondedWarehouse', s => s.unloadDate ? 1 : null, vals => vals.length).map(d => ({ name: d.name, value: d.value, capacity: WAREHOUSE_CAPACITIES[d.name] || 0 })).sort((a, b) => b.value - a.value),
-        bondedFlow: aggregateBy('bondedWarehouse', s => (s.ata ? 1 : null), vals => vals.length).map(d => ({
-            name: d.name,
-            placed: d.value,
-            picked: shipments.filter(s => s && s.bondedWarehouse === d.name && s.deliveryByd).length,
-            arrived: shipments.filter(s => s && s.bondedWarehouse === d.name && s.estimatedDelivery).length
-        })).sort((a, b) => b.placed - a.placed),
+        carrierVolume,
+        warehouseVolume,
+        unloadedByWarehouse,
+        bondedFlow,
         bondedInventory: Object.entries(shipments.reduce((acc, s) => {
             if (s && s.ata && isValidDate(s.ata) && !s.deliveryByd) {
                 const warehouse = s.bondedWarehouse || 'Unknown';

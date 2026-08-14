@@ -597,6 +597,36 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
         </div>
     );
 
+    const monthlyStatsSummary = useMemo(() => {
+        const trend = data?.monthlyTrend || [];
+        const totalVolume = trend.reduce((sum, item) => sum + (item.value || 0), 0);
+        const totalLate = trend.reduce((sum, item) => sum + (item.late || 0), 0);
+        const onTimeRate = totalVolume > 0 ? (((totalVolume - totalLate) / totalVolume) * 100).toFixed(1) : '100.0';
+        const monthlyAvg = trend.length > 0 ? Math.round(totalVolume / trend.length) : 0;
+        return { totalVolume, totalLate, onTimeRate, monthlyAvg };
+    }, [data?.monthlyTrend]);
+
+    const renderMonthlyPerformanceStats = () => (
+        <div className="flex flex-wrap gap-2 justify-end items-center">
+            <div className="flex items-center gap-1.5 bg-blue-50/80 px-3 py-1.5 rounded-xl border border-blue-200/50">
+                <span className="text-[9px] font-black uppercase text-blue-600 tracking-wider">Total Delivered:</span>
+                <span className="text-xs font-black text-blue-950 font-display">{monthlyStatsSummary.totalVolume.toLocaleString()}</span>
+            </div>
+            <div className="flex items-center gap-1.5 bg-emerald-50/80 px-3 py-1.5 rounded-xl border border-emerald-200/50">
+                <span className="text-[9px] font-black uppercase text-emerald-600 tracking-wider">On-Time Rate:</span>
+                <span className="text-xs font-black text-emerald-950 font-display">{monthlyStatsSummary.onTimeRate}%</span>
+            </div>
+            <div className="flex items-center gap-1.5 bg-rose-50/80 px-3 py-1.5 rounded-xl border border-rose-200/50">
+                <span className="text-[9px] font-black uppercase text-rose-600 tracking-wider">Late Volume:</span>
+                <span className="text-xs font-black text-rose-950 font-display">{monthlyStatsSummary.totalLate.toLocaleString()}</span>
+            </div>
+            <div className="flex items-center gap-1.5 bg-slate-900 text-white px-3 py-1.5 rounded-xl">
+                <span className="text-[9px] font-black uppercase text-slate-300 tracking-wider">Mo. Avg:</span>
+                <span className="text-xs font-black font-display">{monthlyStatsSummary.monthlyAvg.toLocaleString()}</span>
+            </div>
+        </div>
+    );
+
     const renderChartContent = (key: string, isMaximized: boolean = false) => {
         const labelSize = isMaximized ? 12 : 10;
         const tickSize = isMaximized ? 11 : 9;
@@ -1352,8 +1382,8 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                 <ChartContainer
                     title={getChartMeta('monthly_trend').title}
                     subtitle={getChartMeta('monthly_trend').subtitle}
-                    headerRight={<div className="bg-slate-900 text-white px-4 py-1.5 rounded-2xl text-[10px] font-black uppercase">DELIVERED: {getSum(data?.monthlyTrend || [])}</div>}
-                    height={350}
+                    headerRight={renderMonthlyPerformanceStats()}
+                    height={380}
                     onMaximize={() => setMaximizedChart('monthly_trend')}
                 >
                     {renderChartContent('monthly_trend')}
