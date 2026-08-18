@@ -28,7 +28,8 @@ import {
   X,
   ChevronRight,
   ShieldAlert,
-  Boxes
+  Boxes,
+  FileText
 } from 'lucide-react';
 
 interface ShipownersViewProps {
@@ -101,6 +102,7 @@ export const ShipownersView: React.FC<ShipownersViewProps> = ({ shipments = [] }
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [selectedYear, setSelectedYear] = useState<string>('ALL');
   const [selectedMonth, setSelectedMonth] = useState<string>('ALL');
+  const [selectedIncoterm, setSelectedIncoterm] = useState<string>('ALL');
   
   // Drill-down Modal State
   const [modalShipowner, setModalShipowner] = useState<string | null>(null);
@@ -113,24 +115,32 @@ export const ShipownersView: React.FC<ShipownersViewProps> = ({ shipments = [] }
     direction: 'desc'
   });
 
-  // Extract Years & Months for quick scoped filtering
-  const { availableYears, availableMonths } = useMemo(() => {
+  // Extract Years, Months, and Incoterms for quick scoped filtering
+  const { availableYears, availableMonths, availableIncoterms } = useMemo(() => {
     const years = new Set<string>();
     const months = new Set<string>();
+    const incoterms = new Set<string>();
     shipments.forEach(s => {
       const d = s.deliveryByd || s.ata || s.estimatedDelivery;
       if (d && isValidDate(d)) {
         years.add(String(d.getFullYear()));
         months.add(String(d.getMonth() + 1).padStart(2, '0'));
       }
+      if (s.incoterm && s.incoterm.trim()) {
+        const inco = s.incoterm.trim().toUpperCase();
+        if (inco !== '0' && inco !== 'N/A' && inco !== 'NULL' && inco !== '-') {
+          incoterms.add(inco);
+        }
+      }
     });
     return {
       availableYears: Array.from(years).sort((a, b) => b.localeCompare(a)),
-      availableMonths: Array.from(months).sort()
+      availableMonths: Array.from(months).sort(),
+      availableIncoterms: Array.from(incoterms).sort()
     };
   }, [shipments]);
 
-  // Filter shipments based on temporal and status filters
+  // Filter shipments based on temporal, incoterm and status filters
   const timeFilteredShipments = useMemo(() => {
     if (!Array.isArray(shipments)) return [];
     return shipments.filter(s => {
@@ -142,9 +152,13 @@ export const ShipownersView: React.FC<ShipownersViewProps> = ({ shipments = [] }
       if (selectedMonth !== 'ALL') {
         if (!d || !isValidDate(d) || String(d.getMonth() + 1).padStart(2, '0') !== selectedMonth) return false;
       }
+      if (selectedIncoterm !== 'ALL') {
+        const inco = (s.incoterm || '').trim().toUpperCase();
+        if (inco !== selectedIncoterm) return false;
+      }
       return true;
     });
-  }, [shipments, selectedYear, selectedMonth]);
+  }, [shipments, selectedYear, selectedMonth, selectedIncoterm]);
 
   // Aggregate comprehensive stats per Shipowner
   const shipownerStatsMap = useMemo(() => {
@@ -373,6 +387,7 @@ export const ShipownersView: React.FC<ShipownersViewProps> = ({ shipments = [] }
     const headers = [
       'Container Number',
       'Shipowner',
+      'Incoterm',
       'Bill of Lading',
       'Vessel Name',
       'Cargo',
@@ -389,6 +404,7 @@ export const ShipownersView: React.FC<ShipownersViewProps> = ({ shipments = [] }
     const csvRows = items.map(s => [
       `"${s.containerNumber || ''}"`,
       `"${s.shipowner || ''}"`,
+      `"${s.incoterm || ''}"`,
       `"${s.billOfLading || ''}"`,
       `"${s.vesselName || ''}"`,
       `"${s.cargo || ''}"`,
@@ -439,7 +455,7 @@ export const ShipownersView: React.FC<ShipownersViewProps> = ({ shipments = [] }
           </div>
         </div>
 
-        {/* Temporal Quick Selector */}
+        {/* Temporal & Incoterm Quick Selector */}
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center bg-white border border-slate-200 rounded-xl p-1 shadow-xs text-xs">
             <span className="px-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
@@ -471,12 +487,28 @@ export const ShipownersView: React.FC<ShipownersViewProps> = ({ shipments = [] }
             </select>
           </div>
 
-          {(selectedYear !== 'ALL' || selectedMonth !== 'ALL') && (
+          <div className="flex items-center bg-white border border-slate-200 rounded-xl p-1 shadow-xs text-xs">
+            <span className="px-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+              <FileText className="w-3 h-3 text-indigo-500" /> Incoterm
+            </span>
+            <select
+              value={selectedIncoterm}
+              onChange={(e) => setSelectedIncoterm(e.target.value)}
+              className="bg-transparent font-bold text-slate-700 text-xs py-1 px-2 outline-none cursor-pointer"
+            >
+              <option value="ALL">All Incoterms ({availableIncoterms.length})</option>
+              {availableIncoterms.map(inco => (
+                <option key={inco} value={inco}>{inco}</option>
+              ))}
+            </select>
+          </div>
+
+          {(selectedYear !== 'ALL' || selectedMonth !== 'ALL' || selectedIncoterm !== 'ALL') && (
             <button
-              onClick={() => { setSelectedYear('ALL'); setSelectedMonth('ALL'); }}
+              onClick={() => { setSelectedYear('ALL'); setSelectedMonth('ALL'); setSelectedIncoterm('ALL'); }}
               className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-[11px] font-bold transition-colors cursor-pointer"
             >
-              Reset Time
+              Reset Filters
             </button>
           )}
         </div>
@@ -1087,6 +1119,7 @@ export const ShipownersView: React.FC<ShipownersViewProps> = ({ shipments = [] }
                   <thead>
                     <tr className="bg-slate-100/70 border-b border-slate-200 text-[10px] font-black text-slate-400 uppercase tracking-wider">
                       <th className="py-3 px-4">Container ID</th>
+                      <th className="py-3 px-4">Incoterm</th>
                       <th className="py-3 px-4">Bill of Lading</th>
                       <th className="py-3 px-4">Vessel Name</th>
                       <th className="py-3 px-4">Cargo</th>
@@ -1101,7 +1134,7 @@ export const ShipownersView: React.FC<ShipownersViewProps> = ({ shipments = [] }
                   <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
                     {modalPaginatedShipments.length === 0 ? (
                       <tr>
-                        <td colSpan={10} className="py-12 text-center text-slate-400">
+                        <td colSpan={11} className="py-12 text-center text-slate-400">
                           No containers match the current search
                         </td>
                       </tr>
@@ -1109,6 +1142,11 @@ export const ShipownersView: React.FC<ShipownersViewProps> = ({ shipments = [] }
                       modalPaginatedShipments.map((s, i) => (
                         <tr key={s.containerNumber || i} className="hover:bg-slate-50/80">
                           <td className="py-3 px-4 font-mono font-black text-slate-900">{s.containerNumber || '-'}</td>
+                          <td className="py-3 px-4">
+                            <span className="px-2 py-0.5 rounded-md font-mono font-bold text-[10px] bg-slate-100 text-slate-700 border border-slate-200/60">
+                              {s.incoterm || '-'}
+                            </span>
+                          </td>
                           <td className="py-3 px-4 font-mono text-indigo-600 font-bold">{s.billOfLading || '-'}</td>
                           <td className="py-3 px-4 font-bold text-slate-800">{s.vesselName || '-'}</td>
                           <td className="py-3 px-4 text-slate-600 truncate max-w-[120px]" title={s.cargo}>{s.cargo || '-'}</td>
