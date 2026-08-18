@@ -88,6 +88,22 @@ export default function App() {
   const [isExporting, setIsExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const handleParsedData = React.useCallback(async (processed: any) => {
+    setShipments(processed.shipments || []);
+    setCarriersList(processed.carriers || []);
+    setAnalystsList(processed.analysts || []);
+    setCargosList(processed.cargos || []);
+    setContainerTypesList(processed.containerTypes || []);
+    setIncotermsList(processed.incoterms || []);
+    setRomaneioStatusesList(processed.romaneioStatuses || []);
+    setYearsList(processed.years || []);
+    setStatusComexList(processed.statusComexList || []);
+    setGeneralWarehouseList(processed.generalWarehouseList || []);
+    setIsLoading(false);
+    setLoadingProgress({ percent: 100, message: "Ready" });
+    setError(null);
+  }, []);
+
   const handleFileUpload = React.useCallback(async (data: any[][]) => {
     setIsLoading(true);
     setLoadingProgress({ percent: 5, message: "Parsing spreadsheet structure..." });
@@ -98,25 +114,13 @@ export default function App() {
         setLoadingProgress({ percent, message });
       });
 
-      setShipments(processed.shipments || []);
-      setCarriersList(processed.carriers || []);
-      setAnalystsList(processed.analysts || []);
-      setCargosList(processed.cargos || []);
-      setContainerTypesList(processed.containerTypes || []);
-      setIncotermsList(processed.incoterms || []);
-      setRomaneioStatusesList(processed.romaneioStatuses || []);
-      setYearsList(processed.years || []);
-      setStatusComexList(processed.statusComexList || []);
-      setGeneralWarehouseList(processed.generalWarehouseList || []);
-      setIsLoading(false);
-      setLoadingProgress({ percent: 100, message: "Ready" });
-      setError(null);
+      await handleParsedData(processed);
     } catch (err: any) {
       console.error("Data processing error:", err);
       setError(err.message || "Failed to process spreadsheet.");
       setIsLoading(false);
     }
-  }, []);
+  }, [handleParsedData]);
 
   const handleExportPPT = async () => {
     if (!Array.isArray(shipments) || shipments.length === 0) return;
@@ -540,7 +544,9 @@ export default function App() {
             {shipments.length > 0 && (
               <div className="no-export">
                 <FileUpload 
+                  onParsedData={handleParsedData}
                   onFileUpload={handleFileUpload} 
+                  onProgress={(percent, message) => setLoadingProgress({ percent, message })}
                   onError={setError} 
                   setIsLoading={setIsLoading} 
                   customClass="w-full inline-flex items-center justify-center px-4 py-3.5 bg-slate-800/80 hover:bg-slate-800 text-white text-[10px] font-black uppercase tracking-widest rounded-xl cursor-pointer transition-colors border border-slate-700 hover:border-slate-600"
@@ -620,7 +626,13 @@ export default function App() {
                      Upload your operational datasets to activate the flux engine and unlock deep neural insights.
                    </p>
                    <div className="mt-12 inline-block">
-                      <FileUpload onFileUpload={handleFileUpload} onError={setError} setIsLoading={setIsLoading} />
+                      <FileUpload 
+                        onParsedData={handleParsedData}
+                        onFileUpload={handleFileUpload} 
+                        onProgress={(percent, message) => setLoadingProgress({ percent, message })}
+                        onError={setError} 
+                        setIsLoading={setIsLoading} 
+                      />
                    </div>
                 </div>
               ) : (
