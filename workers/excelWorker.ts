@@ -202,6 +202,7 @@ self.onmessage = async (e: MessageEvent) => {
         };
 
         const carriers = new Set<string>();
+        const shipowners = new Set<string>();
         const analysts = new Set<string>();
         const cargos = new Set<string>();
         const containerTypes = new Set<string>();
@@ -350,6 +351,7 @@ self.onmessage = async (e: MessageEvent) => {
             if (depot === "" || depot === "0") depot = 'N/A';
 
             if (carrier !== 'Unknown') carriers.add(carrier);
+            if (shipowner && shipowner !== 'UNKNOWN' && shipowner !== '0') shipowners.add(shipowner);
             if (analyst !== 'Unknown') analysts.add(analyst);
             if (cargo) cargos.add(cargo);
             if (containerType) containerTypes.add(containerType);
@@ -456,6 +458,7 @@ self.onmessage = async (e: MessageEvent) => {
             data: { 
                 shipments, 
                 carriers: [...carriers].sort(), 
+                shipowners: [...shipowners].sort(),
                 analysts: [...analysts].sort(), 
                 cargos: [...cargos].sort(), 
                 containerTypes: [...containerTypes].sort(),

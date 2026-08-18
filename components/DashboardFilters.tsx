@@ -2,6 +2,7 @@ import React from 'react';
 
 interface DashboardFiltersProps {
     carriers: string[];
+    shipowners?: string[];
     analysts: string[];
     cargos: string[];
     containerTypes: string[];
@@ -9,6 +10,7 @@ interface DashboardFiltersProps {
     romaneioStatuses: string[];
     years: number[];
     selectedCarriers: string[];
+    selectedShipowners?: string[];
     selectedAnalysts: string[];
     selectedCargos: string[];
     selectedContainerTypes: string[];
@@ -18,6 +20,7 @@ interface DashboardFiltersProps {
     selectedPeriod: string;
     selectedMonth: string;
     onCarrierChange: (carriers: string[]) => void;
+    onShipownerChange?: (shipowners: string[]) => void;
     onAnalystChange: (analysts: string[]) => void;
     onCargoChange: (cargos: string[]) => void;
     onContainerTypeChange: (types: string[]) => void;
@@ -31,6 +34,7 @@ interface DashboardFiltersProps {
 
 const DashboardFilters: React.FC<DashboardFiltersProps> = ({
     carriers = [],
+    shipowners = [],
     analysts = [],
     cargos = [],
     containerTypes = [],
@@ -38,6 +42,7 @@ const DashboardFilters: React.FC<DashboardFiltersProps> = ({
     romaneioStatuses = [],
     years = [],
     selectedCarriers = [],
+    selectedShipowners = [],
     selectedAnalysts = [],
     selectedCargos = [],
     selectedContainerTypes = [],
@@ -47,6 +52,7 @@ const DashboardFilters: React.FC<DashboardFiltersProps> = ({
     selectedPeriod = 'all',
     selectedMonth = 'all',
     onCarrierChange,
+    onShipownerChange,
     onAnalystChange,
     onCargoChange,
     onContainerTypeChange,
@@ -90,6 +96,7 @@ const DashboardFilters: React.FC<DashboardFiltersProps> = ({
     // Count how many filters are effectively active with null safety
     const activeFiltersCount =
         (Array.isArray(selectedCarriers) && selectedCarriers.length ? 1 : 0) +
+        (Array.isArray(selectedShipowners) && selectedShipowners.length ? 1 : 0) +
         (Array.isArray(selectedAnalysts) && selectedAnalysts.length ? 1 : 0) +
         (Array.isArray(selectedCargos) && selectedCargos.length ? 1 : 0) +
         (Array.isArray(selectedContainerTypes) && selectedContainerTypes.length ? 1 : 0) +
@@ -240,8 +247,9 @@ const DashboardFilters: React.FC<DashboardFiltersProps> = ({
             </div>
 
             {/* Entity filters grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-6">
                 {[
+                    { id: 'shipownerFilter', label: 'Shipowner / Armador', list: shipowners || [], selected: selectedShipowners || [], change: onShipownerChange || (() => {}) },
                     { id: 'carrierFilter', label: 'Carrier Network', list: carriers || [], selected: selectedCarriers || [], change: onCarrierChange },
                     { id: 'analystFilter', label: 'Analyst Group', list: analysts || [], selected: selectedAnalysts || [], change: onAnalystChange },
                     { id: 'cargoFilter', label: 'Commodity Type', list: cargos || [], selected: selectedCargos || [], change: onCargoChange },

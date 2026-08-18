@@ -18,13 +18,14 @@ import PortYardOperationStatus from "./components/PortYardOperationStatus";
 import { GeneralWarehouseDistribution } from "./components/GeneralWarehouseDistribution";
 import { WarehouseDistribution } from "./components/WarehouseDistribution";
 import { DeliveriesView } from "./components/DeliveriesView";
+import { ShipownersView } from "./components/ShipownersView";
 
 // Utils
 import { processRawDataAsync, calculateDashboardData, toUTC, getISOWeek } from "./utils/dataProcessor";
 import { currencyFormatter } from "./utils/formatters";
 import { Shipment, SortConfig, PipelineWeek } from "./types";
 
-type MainView = "performance" | "goods_analysis" | "current_inventory" | "vessel_matrix" | "port_yard_status" | "warehouse_distribution" | "general_warehouse_distribution" | "deliveries";
+type MainView = "performance" | "shipowners" | "goods_analysis" | "current_inventory" | "vessel_matrix" | "port_yard_status" | "warehouse_distribution" | "general_warehouse_distribution" | "deliveries";
 
 const isValidDate = (d: any): d is Date => d instanceof Date && !isNaN(d.getTime());
 
@@ -44,7 +45,23 @@ export default function App() {
   const [mainView, setMainView] = useState<MainView>("performance");
   const [mounted, setMounted] = useState(false);
   const [isStoragePanelMinimized, setIsStoragePanelMinimized] = useState(false);
+  const [isLeftSidebarMinimized, setIsLeftSidebarMinimized] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('isLeftSidebarMinimized') === 'true';
+    }
+    return false;
+  });
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const toggleLeftSidebar = React.useCallback(() => {
+    setIsLeftSidebarMinimized(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem('isLeftSidebarMinimized', String(next));
+      } catch (e) {}
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     setMounted(true);
@@ -52,6 +69,7 @@ export default function App() {
 
   const [shipments, setShipments] = useState<Shipment[]>([]);
   const [carriersList, setCarriersList] = useState<string[]>([]);
+  const [shipownersList, setShipownersList] = useState<string[]>([]);
   const [analystsList, setAnalystsList] = useState<string[]>([]);
   const [cargosList, setCargosList] = useState<string[]>([]);
   const [containerTypesList, setContainerTypesList] = useState<string[]>([]);
@@ -63,6 +81,7 @@ export default function App() {
   
   const [filters, setFilters] = useState({
     carriers: [] as string[],
+    shipowners: [] as string[],
     analysts: [] as string[],
     cargos: [] as string[],
     containerTypes: [] as string[],
@@ -91,6 +110,7 @@ export default function App() {
   const handleParsedData = React.useCallback(async (processed: any) => {
     setShipments(processed.shipments || []);
     setCarriersList(processed.carriers || []);
+    setShipownersList(processed.shipowners || []);
     setAnalystsList(processed.analysts || []);
     setCargosList(processed.cargos || []);
     setContainerTypesList(processed.containerTypes || []);
@@ -213,6 +233,7 @@ export default function App() {
     return shipments.filter((s) => {
       if (!s) return false;
       const matchCarrier = filters.carriers.length === 0 || (s.carrier && filters.carriers.includes(s.carrier));
+      const matchShipowner = filters.shipowners.length === 0 || (s.shipowner && filters.shipowners.includes(s.shipowner));
       const matchAnalyst = filters.analysts.length === 0 || (s.analyst && filters.analysts.includes(s.analyst));
       const matchCargo = filters.cargos.length === 0 || (s.cargo && filters.cargos.includes(s.cargo));
       const matchType = filters.containerTypes.length === 0 || (s.containerType && filters.containerTypes.includes(s.containerType));
@@ -234,9 +255,9 @@ export default function App() {
       }
 
       const matchMonth = filters.month === "all" || (date && isValidDate(date) && date.getMonth().toString() === filters.month);
-      const matchSearch = !debouncedSearchTerm || [s.containerNumber, s.carrier, s.vesselName, s.shipper, s.billOfLading].some(v => String(v || '').toLowerCase().includes(debouncedSearchTerm.toLowerCase()));
+      const matchSearch = !debouncedSearchTerm || [s.containerNumber, s.carrier, s.shipowner, s.vesselName, s.shipper, s.billOfLading].some(v => String(v || '').toLowerCase().includes(debouncedSearchTerm.toLowerCase()));
 
-      return matchCarrier && matchAnalyst && matchCargo && matchType && matchIncoterm && matchRomaneio && matchYear && matchPeriod && matchMonth && matchSearch;
+      return matchCarrier && matchShipowner && matchAnalyst && matchCargo && matchType && matchIncoterm && matchRomaneio && matchYear && matchPeriod && matchMonth && matchSearch;
     });
   }, [shipments, filters, debouncedSearchTerm]);
 
@@ -256,7 +277,7 @@ export default function App() {
   const paginatedShipments = sortedShipments.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const resetFilters = React.useCallback(() => {
-    setFilters({ carriers: [], analysts: [], cargos: [], containerTypes: [], incoterms: [], romaneioStatuses: [], year: "all", period: "all", month: "all" });
+    setFilters({ carriers: [], shipowners: [], analysts: [], cargos: [], containerTypes: [], incoterms: [], romaneioStatuses: [], year: "all", period: "all", month: "all" });
   }, []);
 
   const handleLotClick = React.useCallback((model: string, dateLabel: string, batchNumber: string) => {
@@ -500,23 +521,43 @@ export default function App() {
         )}
 
         {/* Premium Left Sidebar */}
-        <aside className={`fixed inset-y-0 left-0 w-[285px] bg-slate-900 border-r border-slate-800 text-white z-[90] flex flex-col justify-between no-export shrink-0 transition-transform duration-300 transform ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
+        <aside className={`fixed inset-y-0 left-0 ${isLeftSidebarMinimized ? 'w-[80px]' : 'w-[285px]'} bg-slate-900 border-r border-slate-800 text-white z-[90] flex flex-col justify-between no-export shrink-0 transition-all duration-300 transform ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
           <div className="flex flex-col flex-1 min-h-0">
-            <div className="flex items-center gap-4 px-6 py-8 border-b border-slate-800 bg-slate-950/20">
-              <div className="bg-indigo-600 w-11 h-11 rounded-[14px] flex items-center justify-center shadow-lg shadow-indigo-600/30 shrink-0">
-                <span className="material-icons text-white text-xl">insights</span>
+            <div className={`flex items-center ${isLeftSidebarMinimized ? 'justify-center flex-col gap-3 py-6 px-2' : 'justify-between px-6 py-7'} border-b border-slate-800 bg-slate-950/20 transition-all`}>
+              <div className="flex items-center gap-3.5 min-w-0">
+                <div 
+                  className="bg-indigo-600 w-11 h-11 rounded-[14px] flex items-center justify-center shadow-lg shadow-indigo-600/30 shrink-0 cursor-pointer"
+                  onClick={toggleLeftSidebar}
+                  title={isLeftSidebarMinimized ? "Click to expand menu" : "Operational Flux"}
+                >
+                  <span className="material-icons text-white text-xl">insights</span>
+                </div>
+                {!isLeftSidebarMinimized && (
+                  <div className="truncate">
+                    <h1 className="text-base font-display font-black leading-none tracking-tight text-white flex items-center gap-1">
+                      Operational <span className="text-indigo-400">Flux</span>
+                    </h1>
+                    <p className="text-[8px] text-slate-500 font-black uppercase tracking-[0.25em] mt-1.5 leading-none">Intelligence v4.0</p>
+                  </div>
+                )}
               </div>
-              <div>
-                <h1 className="text-base font-display font-black leading-none tracking-tight text-white flex items-center gap-1">
-                  Operational <span className="text-indigo-400">Flux</span>
-                </h1>
-                <p className="text-[8px] text-slate-500 font-black uppercase tracking-[0.25em] mt-1.5 leading-none">Intelligence v4.0</p>
-              </div>
+
+              {/* Collapse/Expand Toggle Button */}
+              <button
+                onClick={toggleLeftSidebar}
+                title={isLeftSidebarMinimized ? "Expand Menu" : "Collapse Menu"}
+                className="hidden lg:flex w-8 h-8 rounded-xl bg-slate-800/80 hover:bg-indigo-600 hover:text-white text-slate-400 items-center justify-center transition-all cursor-pointer border border-slate-700/50 hover:border-indigo-500 shadow-sm shrink-0"
+              >
+                <span className="material-icons text-base">
+                  {isLeftSidebarMinimized ? 'chevron_right' : 'chevron_left'}
+                </span>
+              </button>
             </div>
 
-            <nav className="flex-1 px-4 py-8 space-y-1.5 overflow-y-auto custom-scrollbar">
+            <nav className={`flex-1 ${isLeftSidebarMinimized ? 'px-2 py-6 space-y-2' : 'px-4 py-8 space-y-1.5'} overflow-y-auto custom-scrollbar transition-all`}>
               {[
                 { id: 'performance', label: 'Dashboard', icon: 'grid_view' },
+                { id: 'shipowners', label: 'Shipowners', icon: 'directions_boat' },
                 { id: 'goods_analysis', label: 'Flow', icon: 'auto_graph' },
                 { id: 'current_inventory', label: 'Stock', icon: 'warehouse' },
                 { id: 'vessel_matrix', label: 'Maritime', icon: 'sailing' },
@@ -531,25 +572,37 @@ export default function App() {
                     setMainView(item.id as MainView);
                     setMobileMenuOpen(false);
                   }}
-                  className={`w-full flex items-center gap-3.5 px-4 py-3.5 rounded-xl text-left text-[11px] font-black uppercase tracking-wider transition-all relative cursor-pointer ${mainView === item.id ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30 font-extrabold scale-[1.02]' : 'text-slate-400 hover:text-white hover:bg-slate-800/40'}`}
+                  title={isLeftSidebarMinimized ? item.label : undefined}
+                  className={`w-full flex items-center ${isLeftSidebarMinimized ? 'justify-center p-3.5' : 'gap-3.5 px-4 py-3.5'} rounded-xl text-left text-[11px] font-black uppercase tracking-wider transition-all relative cursor-pointer group ${
+                    mainView === item.id 
+                      ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30 font-extrabold scale-[1.02]' 
+                      : 'text-slate-400 hover:text-white hover:bg-slate-800/40'
+                  }`}
                 >
                   <span className="material-icons text-lg shrink-0">{item.icon}</span>
-                  <span>{item.label}</span>
+                  {!isLeftSidebarMinimized && <span>{item.label}</span>}
+                  
+                  {/* Tooltip on minimized hover */}
+                  {isLeftSidebarMinimized && (
+                    <span className="absolute left-full ml-3 px-2.5 py-1.5 bg-slate-950 text-white text-[10px] font-bold uppercase tracking-wider rounded-lg shadow-xl border border-slate-800 whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50">
+                      {item.label}
+                    </span>
+                  )}
                 </button>
               ))}
             </nav>
           </div>
 
-          <div className="p-5 border-t border-slate-800 space-y-3 bg-slate-950/40">
+          <div className={`${isLeftSidebarMinimized ? 'p-2 space-y-2' : 'p-5 space-y-3'} border-t border-slate-800 bg-slate-950/40 transition-all`}>
             {shipments.length > 0 && (
-              <div className="no-export">
+              <div className="no-export flex justify-center">
                 <FileUpload 
                   onParsedData={handleParsedData}
                   onFileUpload={handleFileUpload} 
                   onProgress={(percent, message) => setLoadingProgress({ percent, message })}
                   onError={setError} 
                   setIsLoading={setIsLoading} 
-                  customClass="w-full inline-flex items-center justify-center px-4 py-3.5 bg-slate-800/80 hover:bg-slate-800 text-white text-[10px] font-black uppercase tracking-widest rounded-xl cursor-pointer transition-colors border border-slate-700 hover:border-slate-600"
+                  customClass={`w-full inline-flex items-center justify-center ${isLeftSidebarMinimized ? 'p-3' : 'px-4 py-3.5'} bg-slate-800/80 hover:bg-slate-800 text-white text-[10px] font-black uppercase tracking-widest rounded-xl cursor-pointer transition-colors border border-slate-700 hover:border-slate-600`}
                 />
               </div>
             )}
@@ -558,18 +611,19 @@ export default function App() {
               whileTap={{ scale: 0.98 }}
               onClick={handleExportPPT} 
               disabled={isExporting || shipments.length === 0}
-              className={`w-full flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg cursor-pointer ${isExporting ? 'bg-slate-800 text-slate-500' : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-955/20 disabled:opacity-50'}`}
+              title={isLeftSidebarMinimized ? "Export PPT" : undefined}
+              className={`w-full flex items-center justify-center gap-2 ${isLeftSidebarMinimized ? 'p-3' : 'px-4 py-3.5'} rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg cursor-pointer ${isExporting ? 'bg-slate-800 text-slate-500' : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-955/20 disabled:opacity-50'}`}
             >
               <span className={`material-icons text-base shrink-0 ${isExporting ? 'animate-spin' : ''}`}>
                 {isExporting ? 'sync' : 'auto_graph'}
               </span>
-              <span>{isExporting ? 'Exporting...' : 'Export PPT'}</span>
+              {!isLeftSidebarMinimized && <span>{isExporting ? 'Exporting...' : 'Export PPT'}</span>}
             </motion.button>
           </div>
         </aside>
 
         {/* Main Workspace Frame */}
-        <div className={`flex-1 w-full transition-all flex flex-col ${isExporting ? '' : `lg:pl-[285px] ${isStoragePanelMinimized ? 'pr-[80px]' : '2xl:pr-[360px] pr-[360px]'}`}`}>
+        <div className={`flex-1 w-full transition-all duration-300 flex flex-col ${isExporting ? '' : `${isLeftSidebarMinimized ? 'lg:pl-[80px]' : 'lg:pl-[285px]'} ${isStoragePanelMinimized ? 'pr-[80px]' : '2xl:pr-[360px] pr-[360px]'}`}`}>
           <header className="lg:hidden flex items-center justify-between p-4 bg-white border-b border-slate-200 sticky top-0 z-40 no-export shrink-0">
             <div className="flex items-center gap-3">
               <div className="bg-indigo-600 w-8 h-8 rounded-lg flex items-center justify-center shrink-0">
@@ -639,10 +693,11 @@ export default function App() {
                   <div className="flex flex-col gap-10">
                    <div className="no-export">
                       <DashboardFilters 
-                          carriers={carriersList} analysts={analystsList} cargos={cargosList} containerTypes={containerTypesList} incoterms={incotermsList} romaneioStatuses={romaneioStatusesList} years={yearsList}
-                          selectedCarriers={filters.carriers} selectedAnalysts={filters.analysts} selectedCargos={filters.cargos} selectedContainerTypes={filters.containerTypes} selectedIncoterms={filters.incoterms} selectedRomaneioStatuses={filters.romaneioStatuses}
+                          carriers={carriersList} shipowners={shipownersList} analysts={analystsList} cargos={cargosList} containerTypes={containerTypesList} incoterms={incotermsList} romaneioStatuses={romaneioStatusesList} years={yearsList}
+                          selectedCarriers={filters.carriers} selectedShipowners={filters.shipowners} selectedAnalysts={filters.analysts} selectedCargos={filters.cargos} selectedContainerTypes={filters.containerTypes} selectedIncoterms={filters.incoterms} selectedRomaneioStatuses={filters.romaneioStatuses}
                           selectedYear={filters.year} selectedPeriod={filters.period} selectedMonth={filters.month}
                           onCarrierChange={(val) => setFilters(f => ({...f, carriers: val}))}
+                          onShipownerChange={(val) => setFilters(f => ({...f, shipowners: val}))}
                           onAnalystChange={(val) => setFilters(f => ({...f, analysts: val}))}
                           onCargoChange={(val) => setFilters(f => ({...f, cargos: val}))}
                           onContainerTypeChange={(val) => setFilters(f => ({...f, containerTypes: val}))}
@@ -682,6 +737,8 @@ export default function App() {
                 </div>
               )}
             </motion.div>
+          ) : mainView === "shipowners" ? (
+            <ShipownersView shipments={filteredShipments} />
           ) : mainView === "goods_analysis" ? (
             <GoodsAnalysis data={charts} shipments={filteredShipments} />
           ) : mainView === "current_inventory" ? (

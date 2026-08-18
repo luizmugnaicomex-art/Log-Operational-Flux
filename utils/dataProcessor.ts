@@ -147,7 +147,7 @@ const normalizeName = (name: string): string => {
 export const processRawDataAsync = async (
     data: any[][], 
     onProgress?: (progress: number, message: string) => void
-): Promise<{ shipments: Shipment[], carriers: string[], analysts: string[], cargos: string[], containerTypes: string[], incoterms: string[], romaneioStatuses: string[], years: number[], statusComexList: string[], generalWarehouseList: string[] }> => {
+): Promise<{ shipments: Shipment[], carriers: string[], shipowners: string[], analysts: string[], cargos: string[], containerTypes: string[], incoterms: string[], romaneioStatuses: string[], years: number[], statusComexList: string[], generalWarehouseList: string[] }> => {
     if (!Array.isArray(data) || data.length === 0) {
         throw new Error("The uploaded spreadsheet is empty.");
     }
@@ -242,6 +242,7 @@ export const processRawDataAsync = async (
     };
 
     const carriers = new Set<string>();
+    const shipowners = new Set<string>();
     const analysts = new Set<string>();
     const cargos = new Set<string>();
     const containerTypes = new Set<string>();
@@ -372,6 +373,7 @@ export const processRawDataAsync = async (
         if (depot === "" || depot === "0") depot = 'N/A';
 
         if (carrier !== 'Unknown') carriers.add(carrier);
+        if (shipowner && shipowner !== 'UNKNOWN' && shipowner !== '0') shipowners.add(shipowner);
         if (analyst !== 'Unknown') analysts.add(analyst);
         if (cargo) cargos.add(cargo);
         if (containerType) containerTypes.add(containerType);
@@ -476,6 +478,7 @@ export const processRawDataAsync = async (
     return { 
         shipments, 
         carriers: [...carriers].sort(), 
+        shipowners: [...shipowners].sort(),
         analysts: [...analysts].sort(), 
         cargos: [...cargos].sort(), 
         containerTypes: [...containerTypes].sort(),
@@ -498,6 +501,7 @@ export const processRawData = (data: any[][]) => {
     return {
         shipments: [],
         carriers: [],
+        shipowners: [],
         analysts: [],
         cargos: [],
         containerTypes: [],
