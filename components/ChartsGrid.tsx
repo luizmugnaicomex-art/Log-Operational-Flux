@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { ChartData, Shipment } from '../types';
+import { CargoReadyDeliveredAnalysis } from './CargoReadyDeliveredAnalysis';
 import {
     BarChart,
     Bar,
@@ -1241,51 +1242,14 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
             </div>
 
             <div className="export-section lg:col-span-2">
-                <ChartContainer 
-                    title={getChartMeta('cargo_ready_comparison').title} 
-                    subtitle={getChartMeta('cargo_ready_comparison').subtitle}
-                    headerRight={
-                        <div className="flex items-center gap-3">
-                            <label className="flex items-center gap-2 cursor-pointer">
-                                <input type="checkbox" className="accent-indigo-600 rounded" checked={inventoryOnly} onChange={(e) => setInventoryOnly(e.target.checked)} />
-                                <span className="text-[10px] font-black uppercase text-slate-500">Show Inventory Only</span>
-                            </label>
-                            <div className="flex bg-slate-100 p-1 rounded-xl">
-                                <button 
-                                    onClick={() => setInventoryUnit('containers')}
-                                    className={`px-3 py-1 text-[10px] font-black uppercase rounded-lg transition-all ${inventoryUnit === 'containers' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
-                                >
-                                    Containers
-                                </button>
-                                <button 
-                                    onClick={() => setInventoryUnit('bls')}
-                                    className={`px-3 py-1 text-[10px] font-black uppercase rounded-lg transition-all ${inventoryUnit === 'bls' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
-                                >
-                                    BLs
-                                </button>
-                            </div>
-                            <div className="w-[1px] h-6 bg-slate-200" />
-                            <div className="flex bg-slate-100 p-1 rounded-xl">
-                                <button 
-                                    onClick={() => setCargoReadyViewMode('days')}
-                                    className={`px-3 py-1 text-[10px] font-black uppercase rounded-lg transition-all ${cargoReadyViewMode === 'days' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
-                                >
-                                    Days
-                                </button>
-                                <button 
-                                    onClick={() => setCargoReadyViewMode('weeks')}
-                                    className={`px-3 py-1 text-[10px] font-black uppercase rounded-lg transition-all ${cargoReadyViewMode === 'weeks' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
-                                >
-                                    Weeks
-                                </button>
-                            </div>
-                        </div>
-                    }
-                    height={400}
-                    onMaximize={() => setMaximizedChart('cargo_ready_comparison')}
-                >
-                    {renderChartContent('cargo_ready_comparison')}
-                </ChartContainer>
+                <CargoReadyDeliveredAnalysis
+                    data={data}
+                    shipments={shipments}
+                    onInventoryClick={onInventoryClick}
+                    onCargoReadyInflowClick={onCargoReadyInflowClick}
+                    onDrainLineClick={onDrainLineClick}
+                    onVesselArrivalClick={onVesselArrivalClick}
+                />
             </div>
 
             <div className="export-section lg:col-span-2">
