@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import { Shipment } from '../types';
+import { CargoVolumeAnnualChart } from './CargoVolumeAnnualChart';
 import {
     BarChart,
     Bar,
@@ -21,11 +22,15 @@ import { Anchor, BarChart3, TrendingUp, Compass, Settings, AlertCircle, Filter, 
 
 interface PortYardOperationStatusProps {
     shipments: Shipment[];
+    onMonthClick?: (monthData: { monthIndex: number; monthName: string; year: string; shipments: Shipment[] }) => void;
 }
 
 const isValidDate = (d: any): d is Date => d instanceof Date && !isNaN(d.getTime());
 
-export const PortYardOperationStatus: React.FC<PortYardOperationStatusProps> = ({ shipments = [] }) => {
+export const PortYardOperationStatus: React.FC<PortYardOperationStatusProps> = ({ 
+    shipments = [],
+    onMonthClick
+}) => {
     // 0. Set up Year, Month, Day Filter States
     const [selectedYear, setSelectedYear] = useState<string>('All');
     const [selectedMonth, setSelectedMonth] = useState<string>('All');
@@ -327,6 +332,9 @@ export const PortYardOperationStatus: React.FC<PortYardOperationStatusProps> = (
                   </div>
                </div>
             </div>
+
+            {/* Annual Cargo Volume by Bonded Area (ETA Arrivals) */}
+            <CargoVolumeAnnualChart shipments={shipments} onMonthClick={onMonthClick} />
 
             {/* Daily Port Operation Volume */}
             <div className="glass p-10 rounded-[3.5rem] border-none shadow-glass ring-1 ring-white/40 bg-white">

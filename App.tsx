@@ -510,6 +510,14 @@ export default function App() {
     });
   };
 
+  const handleMonthDrilldown = (m: { monthIndex: number; monthName: string; year: string; shipments: Shipment[] }) => {
+    setModalData({
+      isOpen: true,
+      weekLabel: `PORT & YARD DRILLDOWN: Cargo Volume (${m.monthName} ${m.year !== 'All' ? m.year : ''})`,
+      shipments: m.shipments
+    });
+  };
+
   return (
     <div className={`min-h-screen font-sans antialiased print:bg-white overflow-x-clip ${isExporting ? 'is-exporting' : ''}`}>
       <div className="flex w-full min-h-screen relative">
@@ -748,7 +756,7 @@ export default function App() {
             <VesselMatrix shipments={filteredShipments} />
           </div>
         ) : mainView === "port_yard_status" ? (
-          <PortYardOperationStatus shipments={filteredShipments} />
+          <PortYardOperationStatus shipments={filteredShipments} onMonthClick={handleMonthDrilldown} />
         ) : mainView === "warehouse_distribution" ? (
           <WarehouseDistribution shipments={filteredShipments} />
         ) : mainView === "general_warehouse_distribution" ? (
