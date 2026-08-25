@@ -220,6 +220,16 @@ self.onmessage = async (e: MessageEvent) => {
         const rows = rawRows.slice(headerIndex + 1);
         const totalRows = rows.length;
 
+        // String interning pool to minimize memory consumption over 120k rows
+        const stringPool = new Map<string, string>();
+        const intern = (str: string): string => {
+            if (!str) return '';
+            const existing = stringPool.get(str);
+            if (existing !== undefined) return existing;
+            stringPool.set(str, str);
+            return str;
+        };
+
         const normalizeCache = new Map<string, string>();
         const normalizeName = (name: string): string => {
             if (!name) return '';
@@ -230,15 +240,16 @@ self.onmessage = async (e: MessageEvent) => {
                 if (lower === 'skd' || lower === 'ckd' || lower === 'cbu' || lower === 'byd' || lower === 'phev' || lower === 'ev') return match.toUpperCase();
                 return match.charAt(0).toUpperCase() + match.slice(1).toLowerCase();
             });
-            normalizeCache.set(name, res);
-            return res;
+            const interned = intern(res);
+            normalizeCache.set(name, interned);
+            return interned;
         };
 
         const todayUTC = toUTC(new Date());
         let lastReportedProgress = 50;
 
         for (let r = 0; r < totalRows; r++) {
-            if (r % 5000 === 0 && r > 0) {
+            if (r % 10000 === 0 && r > 0) {
                 const percent = Math.min(95, Math.round(50 + (r / totalRows) * 45));
                 if (percent > lastReportedProgress) {
                     lastReportedProgress = percent;
@@ -253,7 +264,7 @@ self.onmessage = async (e: MessageEvent) => {
             const row = rows[r];
             if (!Array.isArray(row) || row.length === 0) continue;
             
-            const containerNumber = indices.containerNumber !== -1 ? String(row[indices.containerNumber] || '').trim() : '';
+            const containerNumber = indices.containerNumber !== -1 ? intern(String(row[indices.containerNumber] || '').trim()) : '';
             const shipperRaw = indices.shipper !== -1 ? row[indices.shipper] : '';
             
             if (!containerNumber && !shipperRaw) continue;
@@ -265,7 +276,7 @@ self.onmessage = async (e: MessageEvent) => {
                 seenContainers.add(containerNumber);
             }
 
-            const billOfLading = indices.billOfLading !== -1 ? String(row[indices.billOfLading] || '').trim() : 'N/A';
+            const billOfLading = indices.billOfLading !== -1 ? intern(String(row[indices.billOfLading] || '').trim()) : 'N/A';
 
             const ataDate = indices.ata !== -1 ? parseDateFast(row[indices.ata]) : null;
             if (ataDate) years.add(ataDate.getFullYear());
@@ -295,23 +306,23 @@ self.onmessage = async (e: MessageEvent) => {
             
             const freeTimeDate = deadlineReturnDate; 
 
-            let shipowner = indices.shipowner !== -1 ? String(row[indices.shipowner] || '').trim().toUpperCase() : '';
+            let shipowner = indices.shipowner !== -1 ? intern(String(row[indices.shipowner] || '').trim().toUpperCase()) : '';
             if (shipowner === 'CSSC') shipowner = 'COSCO';
 
             let carrierRaw = String(indices.carrier !== -1 ? row[indices.carrier] || 'Unknown' : 'Unknown');
             if (carrierRaw.trim().toUpperCase() === 'CSSC') carrierRaw = 'COSCO';
-            const carrier = (carrierRaw === 'Unknown' || carrierRaw === '') ? 'Unknown' : carrierRaw;
+            const carrier = intern((carrierRaw === 'Unknown' || carrierRaw === '') ? 'Unknown' : carrierRaw);
 
-            const analyst = String(indices.analyst !== -1 ? row[indices.analyst] || 'Unknown' : 'Unknown');
-            const technicianResponsibleChinaTeam = indices.technicianResponsibleChinaTeam !== -1 ? String(row[indices.technicianResponsibleChinaTeam] || '').trim() : undefined;
-            const reference = indices.reference !== -1 ? String(row[indices.reference] || '').trim() : undefined;
-            const voyage = indices.voyage !== -1 ? String(row[indices.voyage] || '').trim() : undefined;
-            const cargoPresence = indices.cargoPresence !== -1 ? String(row[indices.cargoPresence] || '').trim() : undefined;
-            const operationScope = indices.operationScope !== -1 ? String(row[indices.operationScope] || '').trim() : undefined;
+            const analyst = intern(String(indices.analyst !== -1 ? row[indices.analyst] || 'Unknown' : 'Unknown'));
+            const technicianResponsibleChinaTeam = indices.technicianResponsibleChinaTeam !== -1 ? intern(String(row[indices.technicianResponsibleChinaTeam] || '').trim()) : undefined;
+            const reference = indices.reference !== -1 ? intern(String(row[indices.reference] || '').trim()) : undefined;
+            const voyage = indices.voyage !== -1 ? intern(String(row[indices.voyage] || '').trim()) : undefined;
+            const cargoPresence = indices.cargoPresence !== -1 ? intern(String(row[indices.cargoPresence] || '').trim()) : undefined;
+            const operationScope = indices.operationScope !== -1 ? intern(String(row[indices.operationScope] || '').trim()) : undefined;
             const loadingDate = indices.loadingDate !== -1 ? parseDateFast(row[indices.loadingDate]) : null;
             const containerPuttedDownAtBydBuffer = indices.containerPuttedDownAtBydBuffer !== -1 ? parseDateFast(row[indices.containerPuttedDownAtBydBuffer]) : null;
-            const containerStatusAtBuffer = indices.containerStatusAtBuffer !== -1 ? String(row[indices.containerStatusAtBuffer] || '').trim() : undefined;
-            const emptyContainerReturnOperation = indices.emptyContainerReturnOperation !== -1 ? String(row[indices.emptyContainerReturnOperation] || '').trim() : undefined;
+            const containerStatusAtBuffer = indices.containerStatusAtBuffer !== -1 ? intern(String(row[indices.containerStatusAtBuffer] || '').trim()) : undefined;
+            const emptyContainerReturnOperation = indices.emptyContainerReturnOperation !== -1 ? intern(String(row[indices.emptyContainerReturnOperation] || '').trim()) : undefined;
 
             const cargoParam = indices.cargo !== -1 ? String(row[indices.cargo] || '').trim() : '';
             const cargo = normalizeName(cargoParam);
@@ -321,13 +332,13 @@ self.onmessage = async (e: MessageEvent) => {
             let extractedModel = cargoTypeStr !== '' ? cargoTypeStr : (cargoDescStr !== '' ? cargoDescStr : 'Other');
             extractedModel = normalizeName(extractedModel);
 
-            const vesselName = indices.vesselName !== -1 ? String(row[indices.vesselName] || '').trim() : '';
-            const containerType = indices.containerType !== -1 ? String(row[indices.containerType] || '').trim() : '';
-            const incoterm = indices.incoterm !== -1 ? String(row[indices.incoterm] || '').trim().toUpperCase() : '';
-            const madeRomaneio = indices.madeRomaneio !== -1 ? String(row[indices.madeRomaneio] || 'NO').trim().toUpperCase() : 'NO';
-            const status = indices.status !== -1 ? String(row[indices.status] || '').trim() : '';
-            const statusComex = indices.statusComex !== -1 ? String(row[indices.statusComex] || '').trim() : '';
-            const generalWarehouse = indices.generalWarehouse !== -1 ? String(row[indices.generalWarehouse] || '').trim() : '';
+            const vesselName = indices.vesselName !== -1 ? intern(String(row[indices.vesselName] || '').trim()) : '';
+            const containerType = indices.containerType !== -1 ? intern(String(row[indices.containerType] || '').trim()) : '';
+            const incoterm = indices.incoterm !== -1 ? intern(String(row[indices.incoterm] || '').trim().toUpperCase()) : '';
+            const madeRomaneio = indices.madeRomaneio !== -1 ? intern(String(row[indices.madeRomaneio] || 'NO').trim().toUpperCase()) : 'NO';
+            const status = indices.status !== -1 ? intern(String(row[indices.status] || '').trim()) : '';
+            const statusComex = indices.statusComex !== -1 ? intern(String(row[indices.statusComex] || '').trim()) : '';
+            const generalWarehouse = indices.generalWarehouse !== -1 ? intern(String(row[indices.generalWarehouse] || '').trim()) : '';
             
             let bondedWarehouse = indices.bondedWarehouse !== -1 ? String(row[indices.bondedWarehouse] || 'Unknown').trim() : 'Unknown';
             if (bondedWarehouse === '') bondedWarehouse = 'Unknown';
@@ -346,9 +357,11 @@ self.onmessage = async (e: MessageEvent) => {
             } else if (bwUpper.includes('BUFFER') || bwUpper.includes('TERCAM')) {
                 bondedWarehouse = 'BUFFER - TERCAM';
             }
+            bondedWarehouse = intern(bondedWarehouse);
 
             let depot = indices.depot !== -1 ? String(row[indices.depot] || 'N/A').trim().toUpperCase() : 'N/A';
             if (depot === "" || depot === "0") depot = 'N/A';
+            depot = intern(depot);
 
             if (carrier !== 'Unknown') carriers.add(carrier);
             if (shipowner && shipowner !== 'UNKNOWN' && shipowner !== '0') shipowners.add(shipowner);
@@ -361,9 +374,9 @@ self.onmessage = async (e: MessageEvent) => {
             if (generalWarehouse) generalWarehouseSet.add(generalWarehouse);
 
             const rawParam = String(indices.parametrization !== -1 ? row[indices.parametrization] || 'Unknown' : 'Unknown').trim();
-            const parametrization = rawParam.length > 0
+            const parametrization = intern(rawParam.length > 0
                 ? rawParam.charAt(0).toUpperCase() + rawParam.slice(1).toLowerCase()
-                : 'Unknown';
+                : 'Unknown');
 
             const totalCostRaw = indices.totalCost !== -1 ? Number(row[indices.totalCost]) || 0 : 0;
             const taxCostRaw = indices.taxCost !== -1 ? Number(row[indices.taxCost]) || 0 : 0;
@@ -395,10 +408,10 @@ self.onmessage = async (e: MessageEvent) => {
             shipments.push({
                 containerNumber,
                 billOfLading,
-                lotNumber: indices.lotNumber !== -1 ? String(row[indices.lotNumber] || 'N/A').trim() : 'N/A',
-                batchNumber: indices.batchNumber !== -1 ? String(row[indices.batchNumber] || '0').trim() : '0',
+                lotNumber: indices.lotNumber !== -1 ? intern(String(row[indices.lotNumber] || 'N/A').trim()) : 'N/A',
+                batchNumber: indices.batchNumber !== -1 ? intern(String(row[indices.batchNumber] || '0').trim()) : '0',
                 cargoModel: extractedModel,
-                shipper: String(shipperRaw || 'Unknown Shipper'),
+                shipper: intern(String(shipperRaw || 'Unknown Shipper')),
                 shipowner,
                 cargo,
                 vesselName,

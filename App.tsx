@@ -19,13 +19,14 @@ import { GeneralWarehouseDistribution } from "./components/GeneralWarehouseDistr
 import { WarehouseDistribution } from "./components/WarehouseDistribution";
 import { DeliveriesView } from "./components/DeliveriesView";
 import { ShipownersView } from "./components/ShipownersView";
+import LogisticsSuggestions from "./components/LogisticsSuggestions";
 
 // Utils
 import { processRawDataAsync, calculateDashboardData, toUTC, getISOWeek } from "./utils/dataProcessor";
 import { currencyFormatter } from "./utils/formatters";
 import { Shipment, SortConfig, PipelineWeek } from "./types";
 
-type MainView = "performance" | "shipowners" | "goods_analysis" | "current_inventory" | "vessel_matrix" | "port_yard_status" | "warehouse_distribution" | "general_warehouse_distribution" | "deliveries";
+type MainView = "performance" | "shipowners" | "goods_analysis" | "current_inventory" | "vessel_matrix" | "port_yard_status" | "warehouse_distribution" | "general_warehouse_distribution" | "deliveries" | "suggestions";
 
 const isValidDate = (d: any): d is Date => d instanceof Date && !isNaN(d.getTime());
 
@@ -229,35 +230,69 @@ export default function App() {
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
   const filteredShipments = useMemo(() => {
-    if (!Array.isArray(shipments)) return [];
+    if (!Array.isArray(shipments) || shipments.length === 0) return [];
+
+    const hasCarrier = filters.carriers.length > 0;
+    const hasShipowner = filters.shipowners.length > 0;
+    const hasAnalyst = filters.analysts.length > 0;
+    const hasCargo = filters.cargos.length > 0;
+    const hasType = filters.containerTypes.length > 0;
+    const hasIncoterm = filters.incoterms.length > 0;
+    const hasRomaneio = filters.romaneioStatuses.length > 0;
+    const hasYear = filters.year !== "all";
+    const hasPeriod = filters.period !== "all";
+    const hasMonth = filters.month !== "all";
+    const searchLower = debouncedSearchTerm ? debouncedSearchTerm.toLowerCase().trim() : '';
+
+    // Ultra-fast path when no filters or search are active
+    if (!hasCarrier && !hasShipowner && !hasAnalyst && !hasCargo && !hasType && !hasIncoterm && !hasRomaneio && !hasYear && !hasPeriod && !hasMonth && !searchLower) {
+      return shipments;
+    }
+
+    const carrierSet = hasCarrier ? new Set(filters.carriers) : null;
+    const shipownerSet = hasShipowner ? new Set(filters.shipowners) : null;
+    const analystSet = hasAnalyst ? new Set(filters.analysts) : null;
+    const cargoSet = hasCargo ? new Set(filters.cargos) : null;
+    const typeSet = hasType ? new Set(filters.containerTypes) : null;
+    const incotermSet = hasIncoterm ? new Set(filters.incoterms) : null;
+    const romaneioSet = hasRomaneio ? new Set(filters.romaneioStatuses) : null;
+
     return shipments.filter((s) => {
       if (!s) return false;
-      const matchCarrier = filters.carriers.length === 0 || (s.carrier && filters.carriers.includes(s.carrier));
-      const matchShipowner = filters.shipowners.length === 0 || (s.shipowner && filters.shipowners.includes(s.shipowner));
-      const matchAnalyst = filters.analysts.length === 0 || (s.analyst && filters.analysts.includes(s.analyst));
-      const matchCargo = filters.cargos.length === 0 || (s.cargo && filters.cargos.includes(s.cargo));
-      const matchType = filters.containerTypes.length === 0 || (s.containerType && filters.containerTypes.includes(s.containerType));
-      const matchIncoterm = filters.incoterms.length === 0 || (s.incoterm && filters.incoterms.includes(s.incoterm));
-      const matchRomaneio = filters.romaneioStatuses.length === 0 || (s.madeRomaneio && filters.romaneioStatuses.includes(s.madeRomaneio));
+      if (carrierSet && (!s.carrier || !carrierSet.has(s.carrier))) return false;
+      if (shipownerSet && (!s.shipowner || !shipownerSet.has(s.shipowner))) return false;
+      if (analystSet && (!s.analyst || !analystSet.has(s.analyst))) return false;
+      if (cargoSet && (!s.cargo || !cargoSet.has(s.cargo))) return false;
+      if (typeSet && (!s.containerType || !typeSet.has(s.containerType))) return false;
+      if (incotermSet && (!s.incoterm || !incotermSet.has(s.incoterm))) return false;
+      if (romaneioSet && (!s.madeRomaneio || !romaneioSet.has(s.madeRomaneio))) return false;
       
       const date = (s.deliveryByd && isValidDate(s.deliveryByd)) ? s.deliveryByd : ((s.ata && isValidDate(s.ata)) ? s.ata : null);
-      const matchYear = filters.year === "all" || (date && isValidDate(date) && date.getFullYear().toString() === filters.year);
+      if (hasYear && (!date || !isValidDate(date) || date.getFullYear().toString() !== filters.year)) return false;
       
-      let matchPeriod = true;
-      if (filters.period !== "all" && date && isValidDate(date)) {
+      if (hasPeriod && date && isValidDate(date)) {
         const month = date.getMonth();
-        if (filters.period === "H1") matchPeriod = month < 6;
-        else if (filters.period === "H2") matchPeriod = month >= 6;
-        else if (filters.period === "Q1") matchPeriod = month < 3;
-        else if (filters.period === "Q2") matchPeriod = month >= 3 && month < 6;
-        else if (filters.period === "Q3") matchPeriod = month >= 6 && month < 9;
-        else if (filters.period === "Q4") matchPeriod = month >= 9;
+        if (filters.period === "H1" && month >= 6) return false;
+        else if (filters.period === "H2" && month < 6) return false;
+        else if (filters.period === "Q1" && month >= 3) return false;
+        else if (filters.period === "Q2" && (month < 3 || month >= 6)) return false;
+        else if (filters.period === "Q3" && (month < 6 || month >= 9)) return false;
+        else if (filters.period === "Q4" && month < 9) return false;
       }
 
-      const matchMonth = filters.month === "all" || (date && isValidDate(date) && date.getMonth().toString() === filters.month);
-      const matchSearch = !debouncedSearchTerm || [s.containerNumber, s.carrier, s.shipowner, s.vesselName, s.shipper, s.billOfLading].some(v => String(v || '').toLowerCase().includes(debouncedSearchTerm.toLowerCase()));
+      if (hasMonth && (!date || !isValidDate(date) || date.getMonth().toString() !== filters.month)) return false;
 
-      return matchCarrier && matchShipowner && matchAnalyst && matchCargo && matchType && matchIncoterm && matchRomaneio && matchYear && matchPeriod && matchMonth && matchSearch;
+      if (searchLower) {
+        const matches = (s.containerNumber && s.containerNumber.toLowerCase().includes(searchLower)) ||
+                        (s.carrier && s.carrier.toLowerCase().includes(searchLower)) ||
+                        (s.shipowner && s.shipowner.toLowerCase().includes(searchLower)) ||
+                        (s.vesselName && s.vesselName.toLowerCase().includes(searchLower)) ||
+                        (s.shipper && s.shipper.toLowerCase().includes(searchLower)) ||
+                        (s.billOfLading && s.billOfLading.toLowerCase().includes(searchLower));
+        if (!matches) return false;
+      }
+
+      return true;
     });
   }, [shipments, filters, debouncedSearchTerm]);
 
@@ -518,6 +553,14 @@ export default function App() {
     });
   };
 
+  const handleSuggestionsDrilldown = React.useCallback((title: string, drilldownShipments: Shipment[]) => {
+    setModalData({
+      isOpen: true,
+      weekLabel: `SUGESTÕES & CONTROLE: ${title}`,
+      shipments: drilldownShipments
+    });
+  }, []);
+
   return (
     <div className={`min-h-screen font-sans antialiased print:bg-white overflow-x-clip ${isExporting ? 'is-exporting' : ''}`}>
       <div className="flex w-full min-h-screen relative">
@@ -572,7 +615,8 @@ export default function App() {
                 { id: 'port_yard_status', label: 'Port & Yard', icon: 'precision_manufacturing' },
                 { id: 'warehouse_distribution', label: 'Warehouse Dist', icon: 'domain' },
                 { id: 'general_warehouse_distribution', label: 'General Warehouse', icon: 'business' },
-                { id: 'deliveries', label: 'Deliveries', icon: 'local_shipping' }
+                { id: 'deliveries', label: 'Deliveries', icon: 'local_shipping' },
+                { id: 'suggestions', label: 'Suggestions', icon: 'tips_and_updates' }
               ].map((item) => (
                 <button
                   key={item.id}
@@ -763,6 +807,8 @@ export default function App() {
           <GeneralWarehouseDistribution shipments={filteredShipments} />
         ) : mainView === "deliveries" ? (
           <DeliveriesView shipments={filteredShipments} />
+        ) : mainView === "suggestions" ? (
+          <LogisticsSuggestions shipments={filteredShipments} onDrilldown={handleSuggestionsDrilldown} />
         ) : null}
         </AnimatePresence>
       </main>

@@ -47,7 +47,7 @@ const PT_MONTHS = [
 
 // Color palette mapping strictly matching the user screenshot
 const BONDED_COLOR_MAP: Record<string, { color: string; bgClass: string; borderClass: string; label: string }> = {
-  'intermaritima': { color: '#22C55E', bgClass: 'bg-emerald-500', borderClass: 'border-emerald-500', label: 'Intermaritima' },
+  'intermaritima': { color: '#22C55E', bgClass: 'bg-emerald-500', borderClass: 'border-emerald-500', label: 'Intermarítima' },
   'intermarítima': { color: '#22C55E', bgClass: 'bg-emerald-500', borderClass: 'border-emerald-500', label: 'Intermarítima' },
   'tpc': { color: '#38BDF8', bgClass: 'bg-sky-400', borderClass: 'border-sky-400', label: 'TPC' },
   'tecon': { color: '#EF4444', bgClass: 'bg-rose-500', borderClass: 'border-rose-500', label: 'TECON' },
@@ -55,9 +55,16 @@ const BONDED_COLOR_MAP: Record<string, { color: string; bgClass: string; borderC
   'tecon santos': { color: '#EF4444', bgClass: 'bg-rose-500', borderClass: 'border-rose-500', label: 'TECON Santos' },
   'clia emporio': { color: '#F59E0B', bgClass: 'bg-amber-400', borderClass: 'border-amber-400', label: 'CLIA Empório' },
   'clia empório': { color: '#F59E0B', bgClass: 'bg-amber-400', borderClass: 'border-amber-400', label: 'CLIA Empório' },
-  'emporio': { color: '#F59E0B', bgClass: 'bg-amber-400', borderClass: 'border-amber-400', label: 'Empório' },
-  'empório': { color: '#F59E0B', bgClass: 'bg-amber-400', borderClass: 'border-amber-400', label: 'Empório' },
+  'emporio': { color: '#F59E0B', bgClass: 'bg-amber-400', borderClass: 'border-amber-400', label: 'CLIA Empório' },
+  'empório': { color: '#F59E0B', bgClass: 'bg-amber-400', borderClass: 'border-amber-400', label: 'CLIA Empório' },
   'teca': { color: '#A855F7', bgClass: 'bg-purple-500', borderClass: 'border-purple-500', label: 'TECA' },
+  'sem info desembaraço': { color: '#64748B', bgClass: 'bg-slate-500', borderClass: 'border-slate-500', label: 'SEM INFO DESEMBARAÇO' },
+  'sem info desembaraço ': { color: '#64748B', bgClass: 'bg-slate-500', borderClass: 'border-slate-500', label: 'SEM INFO DESEMBARAÇO' },
+  'sem info': { color: '#64748B', bgClass: 'bg-slate-500', borderClass: 'border-slate-500', label: 'SEM INFO DESEMBARAÇO' },
+  'sem informação desembaraço': { color: '#64748B', bgClass: 'bg-slate-500', borderClass: 'border-slate-500', label: 'SEM INFO DESEMBARAÇO' },
+  'sem desembaraço': { color: '#64748B', bgClass: 'bg-slate-500', borderClass: 'border-slate-500', label: 'SEM INFO DESEMBARAÇO' },
+  'dta': { color: '#14B8A6', bgClass: 'bg-teal-500', borderClass: 'border-teal-500', label: 'DTA' },
+  'dta pátio': { color: '#14B8A6', bgClass: 'bg-teal-500', borderClass: 'border-teal-500', label: 'DTA' },
   'n/a': { color: '#64748B', bgClass: 'bg-slate-500', borderClass: 'border-slate-500', label: 'N/A' },
   'cleared': { color: '#64748B', bgClass: 'bg-slate-500', borderClass: 'border-slate-500', label: 'N/A' },
   'unassigned': { color: '#64748B', bgClass: 'bg-slate-500', borderClass: 'border-slate-500', label: 'N/A' },
@@ -118,15 +125,86 @@ export const CargoVolumeAnnualChart: React.FC<CargoVolumeAnnualChartProps> = ({
     const clean = (rawName || 'N/A').trim();
     const key = clean.toLowerCase();
     
+    // Check exact match
     if (BONDED_COLOR_MAP[key]) {
       return { ...BONDED_COLOR_MAP[key], originalName: clean };
     }
 
-    // Partial key matching
-    for (const [mapKey, val] of Object.entries(BONDED_COLOR_MAP)) {
-      if (key.includes(mapKey) || mapKey.includes(key)) {
-        return { ...val, originalName: clean };
-      }
+    // Check specific "sem info" or "desembaraço" keywords for gray color
+    if (key.includes('sem info') || key.includes('desembaraço') || key.includes('desembaraco') || key.includes('sem informação') || key.includes('sem informacao')) {
+      return {
+        color: '#64748B',
+        bgClass: 'bg-slate-500',
+        borderClass: 'border-slate-500',
+        label: 'SEM INFO DESEMBARAÇO',
+        originalName: clean
+      };
+    }
+
+    // Check intermaritima
+    if (key.includes('intermaritima') || key.includes('intermarítima')) {
+      return {
+        color: '#22C55E',
+        bgClass: 'bg-emerald-500',
+        borderClass: 'border-emerald-500',
+        label: 'Intermarítima',
+        originalName: clean
+      };
+    }
+
+    // Check tpc
+    if (key === 'tpc' || key.startsWith('tpc ') || key.includes(' tpc')) {
+      return {
+        color: '#38BDF8',
+        bgClass: 'bg-sky-400',
+        borderClass: 'border-sky-400',
+        label: 'TPC',
+        originalName: clean
+      };
+    }
+
+    // Check tecon
+    if (key.includes('tecon')) {
+      return {
+        color: '#EF4444',
+        bgClass: 'bg-rose-500',
+        borderClass: 'border-rose-500',
+        label: 'TECON',
+        originalName: clean
+      };
+    }
+
+    // Check emporio
+    if (key.includes('emporio') || key.includes('empório') || key.includes('clia')) {
+      return {
+        color: '#F59E0B',
+        bgClass: 'bg-amber-400',
+        borderClass: 'border-amber-400',
+        label: 'CLIA Empório',
+        originalName: clean
+      };
+    }
+
+    // Check teca
+    if (key.includes('teca')) {
+      return {
+        color: '#A855F7',
+        bgClass: 'bg-purple-500',
+        borderClass: 'border-purple-500',
+        label: 'TECA',
+        originalName: clean
+      };
+    }
+
+    // Check dta
+    if (key.includes('dta')) {
+      return {
+        color: '#14B8A6',
+        bgClass: 'bg-teal-500',
+        borderClass: 'border-teal-500',
+        label: 'DTA',
+        originalName: clean
+      };
     }
 
     // Dynamic hash color for unmapped warehouses
@@ -148,8 +226,8 @@ export const CargoVolumeAnnualChart: React.FC<CargoVolumeAnnualChartProps> = ({
   const allBondedAreas = useMemo(() => {
     const map = new Map<string, { label: string; color: string; count: number }>();
     
-    // Priority order according to reference screenshot: Intermaritima, TPC, TECON, CLIA Emporio, N/A, TECA
-    const standardOrder = ['Intermarítima', 'TPC', 'TECON', 'CLIA Empório', 'N/A', 'TECA'];
+    // Priority order matching reference layout
+    const standardOrder = ['Intermarítima', 'TPC', 'TECON', 'CLIA Empório', 'SEM INFO DESEMBARAÇO', 'N/A', 'TECA', 'DTA'];
     
     shipments.forEach(s => {
       if (!s) return;
