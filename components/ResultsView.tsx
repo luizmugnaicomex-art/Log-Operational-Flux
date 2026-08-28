@@ -71,6 +71,8 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
   const [selectedQuarter, setSelectedQuarter] = useState<string>('all');
   const [chartMode, setChartMode] = useState<'flux' | 'terminals'>('flux');
   const [showNumbersOnChart, setShowNumbersOnChart] = useState<boolean>(true);
+  const [deliveryChartMode, setDeliveryChartMode] = useState<'bar' | 'area' | 'models'>('bar');
+  const [showDeliveryNumbers, setShowDeliveryNumbers] = useState<boolean>(true);
   const [copiedSuccess, setCopiedSuccess] = useState(false);
   const [presentationMode, setPresentationMode] = useState(false);
 
@@ -155,6 +157,25 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
       shipments: Shipment[];
     }> = {};
 
+    // Monthly bucket structure strictly by deliveryByd: key = 'YYYY-MM'
+    const deliveredMonthlyMap: Record<string, {
+      key: string;
+      year: number;
+      monthIndex: number;
+      monthName: string;
+      monthShort: string;
+      deliveredCount: number;
+      uniqueBLs: Set<string>;
+      models: Record<string, number>;
+      dolphinCount: number;
+      songCount: number;
+      yuanCount: number;
+      sealCount: number;
+      kingCount: number;
+      otherModelCount: number;
+      shipments: Shipment[];
+    }> = {};
+
     for (let i = 0; i < totalCount; i++) {
       const s = filteredShipments[i];
       if (!s) continue;
@@ -225,7 +246,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
       const cr = s.carrier || 'Outro';
       carrierMap[cr] = (carrierMap[cr] || 0) + 1;
 
-      // Monthly Timeline Aggregation (Using ATA or Delivery)
+      // Monthly Timeline Aggregation (Using ATA or Delivery for Inbound flow)
       const primaryDate = (s.ata && isValidDate(s.ata)) ? s.ata : ((s.deliveryByd && isValidDate(s.deliveryByd)) ? s.deliveryByd : null);
       if (primaryDate && isValidDate(primaryDate)) {
         const y = primaryDate.getFullYear();
@@ -272,12 +293,54 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
         else if (termKey === 'CLIA Empório') bucket.cliaCount++;
         else bucket.otherTerminalCount++;
       }
+
+      // Monthly Timeline Aggregation STRICTLY by deliveryByd (Actual Delivery Date at BYD Plant)
+      if (s.deliveryByd && isValidDate(s.deliveryByd)) {
+        const dDate = toUTC(s.deliveryByd);
+        const dy = dDate.getFullYear();
+        const dm = dDate.getMonth();
+        const dMonthKey = `${dy}-${String(dm + 1).padStart(2, '0')}`;
+
+        if (!deliveredMonthlyMap[dMonthKey]) {
+          deliveredMonthlyMap[dMonthKey] = {
+            key: dMonthKey,
+            year: dy,
+            monthIndex: dm,
+            monthName: PT_MONTHS[dm],
+            monthShort: PT_MONTHS_SHORT[dm],
+            deliveredCount: 0,
+            uniqueBLs: new Set<string>(),
+            models: {},
+            dolphinCount: 0,
+            songCount: 0,
+            yuanCount: 0,
+            sealCount: 0,
+            kingCount: 0,
+            otherModelCount: 0,
+            shipments: []
+          };
+        }
+
+        const dBucket = deliveredMonthlyMap[dMonthKey];
+        dBucket.deliveredCount++;
+        dBucket.shipments.push(s);
+        if (s.billOfLading && s.billOfLading !== 'N/A') dBucket.uniqueBLs.add(s.billOfLading);
+
+        const rawModel = (s.cargoModel || s.cargo || '').toUpperCase();
+        if (rawModel.includes('DOLPHIN')) dBucket.dolphinCount++;
+        else if (rawModel.includes('SONG')) dBucket.songCount++;
+        else if (rawModel.includes('YUAN')) dBucket.yuanCount++;
+        else if (rawModel.includes('SEAL')) dBucket.sealCount++;
+        else if (rawModel.includes('KING')) dBucket.kingCount++;
+        else dBucket.otherModelCount++;
+      }
     }
 
-    // Sort Monthly List Chronologically
+    // Sort Monthly Lists Chronologically
     const monthlyList = Object.values(monthlyMap).sort((a, b) => a.key.localeCompare(b.key));
+    const deliveredMonthlyList = Object.values(deliveredMonthlyMap).sort((a, b) => a.key.localeCompare(b.key));
 
-    // Calculate Peak Month & Monthly Average
+    // Calculate Peak Month & Monthly Average for Inbound
     let peakMonthName = '-';
     let peakMonthVolume = 0;
     for (const m of monthlyList) {
@@ -287,9 +350,23 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
       }
     }
 
+    // Calculate Peak Month & Monthly Average for Deliveries at BYD
+    let peakDeliveryMonthName = '-';
+    let peakDeliveryMonthCount = 0;
+    for (const dm of deliveredMonthlyList) {
+      if (dm.deliveredCount > peakDeliveryMonthCount) {
+        peakDeliveryMonthCount = dm.deliveredCount;
+        peakDeliveryMonthName = `${dm.monthName} / ${dm.year}`;
+      }
+    }
+
     const avgMonthlyVolume = monthlyList.length > 0
       ? Math.round(totalCount / monthlyList.length)
       : totalCount;
+
+    const avgMonthlyDelivered = deliveredMonthlyList.length > 0
+      ? Math.round(deliveredCount / deliveredMonthlyList.length)
+      : deliveredCount;
 
     const greenChannelRate = totalCount > 0
       ? ((greenChannelCount / totalCount) * 100).toFixed(1)
@@ -337,6 +414,10 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
       peakMonthName,
       peakMonthVolume,
       monthlyList,
+      deliveredMonthlyList,
+      peakDeliveryMonthName,
+      peakDeliveryMonthCount,
+      avgMonthlyDelivered,
       topModels,
       terminalDist
     };
@@ -935,6 +1016,383 @@ Departamento de Supervisão e Comércio Exterior - BYD`;
                       <span className="font-extrabold text-emerald-700">
                         {m.deliveredCount.toLocaleString('pt-BR')}
                       </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* 4.2 Dedicated Chart: Monthly Deliveries to BYD Plant (Strictly by deliveryByd) */}
+      <div className="bg-white p-6 sm:p-8 rounded-[2.5rem] border border-slate-200/80 shadow-sm space-y-6">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2">
+              <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl border border-emerald-100">
+                <Truck className="w-5 h-5" />
+              </div>
+              <h2 className="text-lg sm:text-xl font-display font-black text-slate-900">
+                Entregas Mensais Efetivas na Planta BYD
+              </h2>
+            </div>
+            <p className="text-xs text-slate-500 font-medium max-w-2xl">
+              Volume de contêineres recebidos e descarregados na planta de Camaçari/Buffer distribuídos estritamente pelo mês da data real de entrega (<span className="font-mono text-emerald-700 font-bold">deliveryByd</span>).
+            </p>
+          </div>
+
+          {/* Quick Metrics Badges & Controls */}
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Quick Metrics Badges */}
+            <div className="hidden sm:flex items-center gap-2 bg-emerald-50/70 border border-emerald-200/70 px-3.5 py-1.5 rounded-2xl text-xs font-bold text-emerald-800">
+              <span className="text-emerald-600 font-black">Total Entregue:</span>
+              <span className="font-mono font-black">{executiveMetrics.deliveredCount.toLocaleString('pt-BR')} CNTRs</span>
+              <span className="text-emerald-300 font-normal">|</span>
+              <span className="text-emerald-600 font-black">Média:</span>
+              <span className="font-mono font-black">{executiveMetrics.avgMonthlyDelivered.toLocaleString('pt-BR')} /mês</span>
+            </div>
+
+            {/* Show/Hide Numbers Toggle */}
+            <button
+              onClick={() => setShowDeliveryNumbers(!showDeliveryNumbers)}
+              className={`px-3 py-1.5 text-xs font-black uppercase tracking-wider rounded-xl border transition-all cursor-pointer flex items-center gap-1.5 ${
+                showDeliveryNumbers
+                  ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
+                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+              }`}
+              title="Exibir/Ocultar valores numéricos fixos no gráfico de entregas"
+            >
+              {showDeliveryNumbers ? <Eye className="w-3.5 h-3.5 text-emerald-400" /> : <EyeOff className="w-3.5 h-3.5 text-slate-400" />}
+              <span>{showDeliveryNumbers ? 'Números Visíveis' : 'Ocultar Números'}</span>
+            </button>
+
+            {/* Chart View Mode Toggle */}
+            <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
+              <button
+                onClick={() => setDeliveryChartMode('bar')}
+                className={`px-3 py-1.5 text-xs font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer ${
+                  deliveryChartMode === 'bar'
+                    ? 'bg-emerald-600 text-white shadow-sm font-extrabold'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Barras de Entregas
+              </button>
+              <button
+                onClick={() => setDeliveryChartMode('area')}
+                className={`px-3 py-1.5 text-xs font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer ${
+                  deliveryChartMode === 'area'
+                    ? 'bg-emerald-600 text-white shadow-sm font-extrabold'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Curva & Tendência
+              </button>
+              <button
+                onClick={() => setDeliveryChartMode('models')}
+                className={`px-3 py-1.5 text-xs font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer ${
+                  deliveryChartMode === 'models'
+                    ? 'bg-emerald-600 text-white shadow-sm font-extrabold'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Mix por Modelo
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Deliveries Recharts Chart with Direct Visible Data Labels */}
+        <div className="h-[400px] w-full pt-4">
+          <ResponsiveContainer width="100%" height="100%">
+            {deliveryChartMode === 'bar' ? (
+              <BarChart data={executiveMetrics.deliveredMonthlyList} margin={{ top: 28, right: 30, left: 10, bottom: 5 }}>
+                <defs>
+                  <linearGradient id="colorDeliveryBar" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#10B981" stopOpacity={1} />
+                    <stop offset="100%" stopColor="#059669" stopOpacity={0.85} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                <XAxis 
+                  dataKey="monthShort" 
+                  tickLine={false} 
+                  axisLine={{ stroke: '#CBD5E1' }}
+                  tick={{ fill: '#64748B', fontSize: 11, fontWeight: 700 }}
+                />
+                <YAxis 
+                  tickLine={false} 
+                  axisLine={{ stroke: '#CBD5E1' }}
+                  tick={{ fill: '#64748B', fontSize: 11, fontWeight: 700 }}
+                  tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v}
+                />
+                <Tooltip 
+                  contentStyle={{ backgroundColor: '#0F172A', borderRadius: '1rem', border: 'none', color: '#fff', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)' }}
+                  itemStyle={{ fontSize: '12px', fontWeight: 'bold' }}
+                  labelStyle={{ color: '#94A3B8', fontWeight: 'bold', marginBottom: '4px' }}
+                  formatter={(val: any) => [`${Number(val).toLocaleString()} CNTRs`, 'Entregues na Planta BYD']}
+                />
+                <Legend 
+                  verticalAlign="top" 
+                  align="right" 
+                  wrapperStyle={{ paddingBottom: '20px', fontSize: '12px', fontWeight: 'bold' }}
+                  formatter={() => 'Contêineres Efetivamente Entregues (BYD)'}
+                />
+                <Bar 
+                  dataKey="deliveredCount" 
+                  name="Entregues na Planta BYD" 
+                  fill="url(#colorDeliveryBar)" 
+                  radius={[8, 8, 0, 0]}
+                >
+                  {showDeliveryNumbers && (
+                    <LabelList
+                      dataKey="deliveredCount"
+                      content={(props: any) => {
+                        const { x, y, width, value, index } = props;
+                        if (value === undefined || value === null || Number(value) <= 0) return null;
+                        const formatted = Number(value).toLocaleString('pt-BR');
+                        const textWidth = Math.max(42, formatted.length * 6.8 + 12);
+
+                        return (
+                          <g key={`del-bar-lbl-${index}`}>
+                            <rect
+                              x={x + width / 2 - textWidth / 2}
+                              y={y - 22}
+                              width={textWidth}
+                              height={19}
+                              rx={5}
+                              fill="#064E3B"
+                              stroke="#10B981"
+                              strokeWidth={1.5}
+                              filter="drop-shadow(0 2px 4px rgba(0,0,0,0.15))"
+                            />
+                            <text
+                              x={x + width / 2}
+                              y={y - 11}
+                              fill="#FFFFFF"
+                              textAnchor="middle"
+                              dominantBaseline="middle"
+                              fontSize={10.5}
+                              fontWeight="800"
+                            >
+                              {formatted}
+                            </text>
+                          </g>
+                        );
+                      }}
+                    />
+                  )}
+                </Bar>
+              </BarChart>
+            ) : deliveryChartMode === 'area' ? (
+              <AreaChart data={executiveMetrics.deliveredMonthlyList} margin={{ top: 28, right: 30, left: 10, bottom: 5 }}>
+                <defs>
+                  <linearGradient id="colorDeliveredDirect" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#10B981" stopOpacity={0.45} />
+                    <stop offset="95%" stopColor="#10B981" stopOpacity={0.0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                <XAxis 
+                  dataKey="monthShort" 
+                  tickLine={false} 
+                  axisLine={{ stroke: '#CBD5E1' }}
+                  tick={{ fill: '#64748B', fontSize: 11, fontWeight: 700 }}
+                />
+                <YAxis 
+                  tickLine={false} 
+                  axisLine={{ stroke: '#CBD5E1' }}
+                  tick={{ fill: '#64748B', fontSize: 11, fontWeight: 700 }}
+                  tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v}
+                />
+                <Tooltip 
+                  contentStyle={{ backgroundColor: '#0F172A', borderRadius: '1rem', border: 'none', color: '#fff', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)' }}
+                  itemStyle={{ fontSize: '12px', fontWeight: 'bold' }}
+                  labelStyle={{ color: '#94A3B8', fontWeight: 'bold', marginBottom: '4px' }}
+                  formatter={(val: any) => [`${Number(val).toLocaleString()} CNTRs`, 'Entregues na Planta BYD']}
+                />
+                <Legend 
+                  verticalAlign="top" 
+                  align="right" 
+                  wrapperStyle={{ paddingBottom: '20px', fontSize: '12px', fontWeight: 'bold' }}
+                  formatter={() => 'Curva de Entregas Mensais na Planta BYD'}
+                />
+                <Area 
+                  type="monotone" 
+                  dataKey="deliveredCount" 
+                  stroke="#10B981" 
+                  strokeWidth={3.5} 
+                  fillOpacity={1} 
+                  fill="url(#colorDeliveredDirect)" 
+                  dot={{ r: 5, stroke: '#10B981', strokeWidth: 2, fill: '#FFFFFF' }}
+                  activeDot={{ r: 8, stroke: '#10B981', strokeWidth: 3, fill: '#FFFFFF' }}
+                >
+                  {showDeliveryNumbers && (
+                    <LabelList
+                      dataKey="deliveredCount"
+                      content={(props: any) => {
+                        const { x, y, value, index } = props;
+                        if (value === undefined || value === null || Number(value) <= 0) return null;
+                        const formatted = Number(value).toLocaleString('pt-BR');
+                        const textWidth = Math.max(42, formatted.length * 6.8 + 12);
+                        const offsetY = -18;
+
+                        return (
+                          <g key={`del-area-lbl-${index}`}>
+                            <rect
+                              x={x - textWidth / 2}
+                              y={y + offsetY - 10}
+                              width={textWidth}
+                              height={19}
+                              rx={5}
+                              fill="#064E3B"
+                              stroke="#10B981"
+                              strokeWidth={1.5}
+                              filter="drop-shadow(0 2px 4px rgba(0,0,0,0.15))"
+                            />
+                            <text
+                              x={x}
+                              y={y + offsetY + 1}
+                              fill="#FFFFFF"
+                              textAnchor="middle"
+                              dominantBaseline="middle"
+                              fontSize={10.5}
+                              fontWeight="800"
+                            >
+                              {formatted}
+                            </text>
+                          </g>
+                        );
+                      }}
+                    />
+                  )}
+                </Area>
+              </AreaChart>
+            ) : (
+              <BarChart data={executiveMetrics.deliveredMonthlyList} margin={{ top: 28, right: 30, left: 10, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                <XAxis 
+                  dataKey="monthShort" 
+                  tickLine={false} 
+                  axisLine={{ stroke: '#CBD5E1' }}
+                  tick={{ fill: '#64748B', fontSize: 11, fontWeight: 700 }}
+                />
+                <YAxis 
+                  tickLine={false} 
+                  axisLine={{ stroke: '#CBD5E1' }}
+                  tick={{ fill: '#64748B', fontSize: 11, fontWeight: 700 }}
+                  tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v}
+                />
+                <Tooltip 
+                  contentStyle={{ backgroundColor: '#0F172A', borderRadius: '1rem', border: 'none', color: '#fff' }}
+                  itemStyle={{ fontSize: '12px', fontWeight: 'bold' }}
+                />
+                <Legend 
+                  verticalAlign="top" 
+                  align="right" 
+                  wrapperStyle={{ paddingBottom: '20px', fontSize: '12px', fontWeight: 'bold' }}
+                />
+                <Bar dataKey="dolphinCount" name="Dolphin / Mini" fill="#10B981" stackId="model" radius={[0, 0, 0, 0]} />
+                <Bar dataKey="songCount" name="Song Plus" fill="#06B6D4" stackId="model" radius={[0, 0, 0, 0]} />
+                <Bar dataKey="yuanCount" name="Yuan Plus" fill="#6366F1" stackId="model" radius={[0, 0, 0, 0]} />
+                <Bar dataKey="sealCount" name="Seal" fill="#8B5CF6" stackId="model" radius={[0, 0, 0, 0]} />
+                <Bar dataKey="kingCount" name="King" fill="#F59E0B" stackId="model" radius={[0, 0, 0, 0]} />
+                <Bar dataKey="otherModelCount" name="Outros / Peças" fill="#94A3B8" stackId="model" radius={[6, 6, 0, 0]}>
+                  {showDeliveryNumbers && (
+                    <LabelList
+                      dataKey="deliveredCount"
+                      content={(props: any) => {
+                        const { x, y, width, index } = props;
+                        const item = executiveMetrics.deliveredMonthlyList[index];
+                        if (!item || item.deliveredCount <= 0) return null;
+                        const formatted = item.deliveredCount.toLocaleString('pt-BR');
+                        const textWidth = Math.max(38, formatted.length * 6.5 + 10);
+
+                        return (
+                          <g key={`bar-del-model-top-${index}`}>
+                            <rect
+                              x={x + width / 2 - textWidth / 2}
+                              y={y - 22}
+                              width={textWidth}
+                              height={18}
+                              rx={4}
+                              fill="#064E3B"
+                              stroke="#10B981"
+                              strokeWidth={1.2}
+                            />
+                            <text
+                              x={x + width / 2}
+                              y={y - 11}
+                              fill="#FFFFFF"
+                              textAnchor="middle"
+                              dominantBaseline="middle"
+                              fontSize={10}
+                              fontWeight="800"
+                            >
+                              {formatted}
+                            </text>
+                          </g>
+                        );
+                      }}
+                    />
+                  )}
+                </Bar>
+              </BarChart>
+            )}
+          </ResponsiveContainer>
+        </div>
+
+        {/* Instant Scannable Monthly Breakdown Strip for Deliveries */}
+        <div className="pt-4 border-t border-slate-100">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[11px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+              <Truck className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Detalhamento de Entregas por Mês (Clique para abrir lista de contêineres entregues)</span>
+            </span>
+            <span className="text-[11px] font-bold text-slate-400">
+              {executiveMetrics.deliveredMonthlyList.length} meses com entregas
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-12 gap-2">
+            {executiveMetrics.deliveredMonthlyList.map((m) => {
+              const isPeak = m.monthName + ' / ' + m.year === executiveMetrics.peakDeliveryMonthName;
+              const deliveryShare = executiveMetrics.deliveredCount > 0
+                ? ((m.deliveredCount / executiveMetrics.deliveredCount) * 100).toFixed(1)
+                : '0.0';
+
+              return (
+                <div
+                  key={`del-card-${m.key}`}
+                  onClick={() => onDrilldown && onDrilldown(`Contêineres Entregues na BYD: ${m.monthName} / ${m.year}`, m.shipments)}
+                  className={`p-3 rounded-2xl border transition-all cursor-pointer group text-left ${
+                    isPeak 
+                      ? 'bg-emerald-500/10 border-emerald-500/40 shadow-xs hover:border-emerald-500' 
+                      : 'bg-slate-50 border-slate-200/80 hover:bg-white hover:shadow-md hover:border-emerald-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-xs font-black text-slate-800">
+                      {m.monthShort}
+                    </span>
+                    {isPeak ? (
+                      <span className="px-1 py-0.2 text-[9px] font-black uppercase rounded bg-emerald-600 text-white">
+                        Pico
+                      </span>
+                    ) : (
+                      <span className="text-[9px] font-bold text-slate-400">
+                        {deliveryShare}%
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="text-sm font-extrabold font-mono text-emerald-700">
+                      {m.deliveredCount.toLocaleString('pt-BR')}
+                    </div>
+                    <div className="text-[10px] font-bold text-slate-400">
+                      {m.uniqueBLs.size} BLs
                     </div>
                   </div>
                 </div>
