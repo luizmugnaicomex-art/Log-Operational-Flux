@@ -21,13 +21,14 @@ import { DeliveriesView } from "./components/DeliveriesView";
 import { ShipownersView } from "./components/ShipownersView";
 import LogisticsSuggestions from "./components/LogisticsSuggestions";
 import ResultsView from "./components/ResultsView";
+import { BondedDwellOptimization } from "./components/BondedDwellOptimization";
 
 // Utils
 import { processRawDataAsync, calculateDashboardData, toUTC, getISOWeek } from "./utils/dataProcessor";
 import { currencyFormatter } from "./utils/formatters";
 import { Shipment, SortConfig, PipelineWeek } from "./types";
 
-type MainView = "performance" | "results" | "shipowners" | "goods_analysis" | "current_inventory" | "vessel_matrix" | "port_yard_status" | "warehouse_distribution" | "general_warehouse_distribution" | "deliveries" | "suggestions";
+type MainView = "performance" | "results" | "bonded_dwell_optimization" | "shipowners" | "goods_analysis" | "current_inventory" | "vessel_matrix" | "port_yard_status" | "warehouse_distribution" | "general_warehouse_distribution" | "deliveries" | "suggestions";
 
 const isValidDate = (d: any): d is Date => d instanceof Date && !isNaN(d.getTime());
 
@@ -610,6 +611,7 @@ export default function App() {
               {[
                 { id: 'performance', label: 'Dashboard', icon: 'grid_view' },
                 { id: 'results', label: 'Results', icon: 'military_tech' },
+                { id: 'bonded_dwell_optimization', label: 'Dwell & Tarifas', icon: 'timer' },
                 { id: 'shipowners', label: 'Shipowners', icon: 'directions_boat' },
                 { id: 'goods_analysis', label: 'Flow', icon: 'auto_graph' },
                 { id: 'current_inventory', label: 'Stock', icon: 'warehouse' },
@@ -793,6 +795,8 @@ export default function App() {
             </motion.div>
           ) : mainView === "results" ? (
           <ResultsView shipments={filteredShipments} onDrilldown={handleSuggestionsDrilldown} />
+        ) : mainView === "bonded_dwell_optimization" ? (
+          <BondedDwellOptimization shipments={filteredShipments} onDrilldown={handleSuggestionsDrilldown} />
         ) : mainView === "shipowners" ? (
             <ShipownersView shipments={filteredShipments} />
           ) : mainView === "goods_analysis" ? (
