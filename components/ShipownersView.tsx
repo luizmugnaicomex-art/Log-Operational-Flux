@@ -31,6 +31,7 @@ import {
   Boxes,
   FileText
 } from 'lucide-react';
+import { ShipownerWarehousePendingChart, normalizeBondedWarehouse, normalizeGeneralWarehouse } from './ShipownerWarehousePendingChart';
 
 interface ShipownersViewProps {
   shipments: Shipment[];
@@ -43,6 +44,8 @@ interface ShipownerStatItem {
   inTransitCount: number;
   atPortCount: number;
   clearedCount: number;
+  pendingBondedCount: number;
+  pendingGeneralCount: number;
   onTimeCount: number;
   onTimeEligible: number;
   demurrageCost: number;
@@ -182,6 +185,8 @@ export const ShipownersView: React.FC<ShipownersViewProps> = ({ shipments = [] }
           inTransitCount: 0,
           atPortCount: 0,
           clearedCount: 0,
+          pendingBondedCount: 0,
+          pendingGeneralCount: 0,
           onTimeCount: 0,
           onTimeEligible: 0,
           demurrageCost: 0,
@@ -204,12 +209,22 @@ export const ShipownersView: React.FC<ShipownersViewProps> = ({ shipments = [] }
       // Operational stages
       if (s.deliveryByd) {
         st.deliveredCount++;
-      } else if (s.channelDate || s.dateNF) {
-        st.clearedCount++;
-      } else if (s.ata) {
-        st.atPortCount++;
       } else {
-        st.inTransitCount++;
+        // Pending delivery to factory
+        const gw = normalizeGeneralWarehouse(s.generalWarehouse);
+        if (gw) {
+          st.pendingGeneralCount++;
+        } else {
+          st.pendingBondedCount++;
+        }
+
+        if (s.channelDate || s.dateNF) {
+          st.clearedCount++;
+        } else if (s.ata) {
+          st.atPortCount++;
+        } else {
+          st.inTransitCount++;
+        }
       }
 
       // Demurrage
@@ -370,7 +385,8 @@ export const ShipownersView: React.FC<ShipownersViewProps> = ({ shipments = [] }
         (s.vesselName && s.vesselName.toLowerCase().includes(term)) ||
         (s.cargo && s.cargo.toLowerCase().includes(term)) ||
         (s.carrier && s.carrier.toLowerCase().includes(term)) ||
-        (s.bondedWarehouse && s.bondedWarehouse.toLowerCase().includes(term))
+        (s.bondedWarehouse && s.bondedWarehouse.toLowerCase().includes(term)) ||
+        (s.generalWarehouse && s.generalWarehouse.toLowerCase().includes(term))
       );
     });
   }, [modalShipowner, shipownerStatsMap, modalSearch]);
@@ -791,7 +807,14 @@ export const ShipownersView: React.FC<ShipownersViewProps> = ({ shipments = [] }
         </div>
       </div>
 
-      {/* 5. Demurrage & Lead Time Comparison Cards */}
+      {/* 5. Containers Pending Delivery by Shipowner: Bonded & General Warehouses (MSC Focus) */}
+      <ShipownerWarehousePendingChart
+        shipments={timeFilteredShipments}
+        onSelectShipowner={(name) => setSelectedShipownerFilter(name)}
+        selectedShipownerFilter={selectedShipownerFilter}
+      />
+
+      {/* 6. Demurrage & Lead Time Comparison Cards */}
       {demurrageChartData.length > 0 && (
         <div className="bg-white rounded-3xl p-8 border border-slate-200/80 shadow-xs">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
@@ -960,12 +983,16 @@ export const ShipownersView: React.FC<ShipownersViewProps> = ({ shipments = [] }
                         </div>
                       </td>
 
-                      {/* Operational Flow (Delivered / Cleared / In-Transit) */}
+                      {/* Operational Flow (Delivered vs Pending: Bonded / General) */}
                       <td className="py-4 px-6">
-                        <div className="flex flex-col gap-1 min-w-[130px]">
-                          <div className="flex justify-between text-[10px] font-bold text-slate-500">
+                        <div className="flex flex-col gap-1 min-w-[140px]">
+                          <div className="flex justify-between text-[10px] font-bold">
                             <span className="text-emerald-600">{st.deliveredCount} deliv</span>
-                            <span className="text-slate-400">{st.totalContainers - st.deliveredCount} pend</span>
+                            <span className="text-slate-600 text-[10px]">
+                              <span className="text-sky-600 font-bold" title="Pending at Bonded">{st.pendingBondedCount} bnd</span>
+                              {' / '}
+                              <span className="text-purple-600 font-bold" title="Pending at General WH">{st.pendingGeneralCount} gen</span>
+                            </span>
                           </div>
                           <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden flex">
                             <div 
@@ -974,9 +1001,14 @@ export const ShipownersView: React.FC<ShipownersViewProps> = ({ shipments = [] }
                               title={`Delivered: ${st.deliveredCount}`}
                             />
                             <div 
-                              className="bg-sky-400 h-full"
-                              style={{ width: `${100 - deliveredPct}%` }}
-                              title={`Pending: ${st.totalContainers - st.deliveredCount}`}
+                              className="bg-sky-500 h-full"
+                              style={{ width: `${st.totalContainers > 0 ? (st.pendingBondedCount / st.totalContainers) * 100 : 0}%` }}
+                              title={`Pending Bonded: ${st.pendingBondedCount}`}
+                            />
+                            <div 
+                              className="bg-purple-500 h-full"
+                              style={{ width: `${st.totalContainers > 0 ? (st.pendingGeneralCount / st.totalContainers) * 100 : 0}%` }}
+                              title={`Pending General: ${st.pendingGeneralCount}`}
                             />
                           </div>
                         </div>
