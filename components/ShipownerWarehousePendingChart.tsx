@@ -11,7 +11,8 @@ import {
   Tooltip,
   ResponsiveContainer,
   Legend,
-  Cell
+  Cell,
+  LabelList
 } from 'recharts';
 import {
   Warehouse,
@@ -31,7 +32,8 @@ import {
   Layers,
   ArrowRight,
   Flame,
-  FileSpreadsheet
+  FileSpreadsheet,
+  BarChart3
 } from 'lucide-react';
 
 interface ShipownerWarehousePendingChartProps {
@@ -105,6 +107,7 @@ export const ShipownerWarehousePendingChart: React.FC<ShipownerWarehousePendingC
   const [chartMode, setChartMode] = useState<'stacked' | 'grouped'>('stacked');
   const [filterScope, setFilterScope] = useState<'arrived_only' | 'all_pending'>('all_pending');
   const [selectedBarShipowner, setSelectedBarShipowner] = useState<string | null>(null);
+  const [chartViewMode, setChartViewMode] = useState<'breakout' | 'overview'>('breakout');
   
   // Drilldown modal for pending return
   const [detailModalShipowner, setDetailModalShipowner] = useState<string | null>(null);
@@ -317,6 +320,59 @@ export const ShipownerWarehousePendingChart: React.FC<ShipownerWarehousePendingC
     return chartData.length > 0 ? shipownerPendingMap[chartData[0].name] : null;
   }, [selectedBarShipowner, selectedShipownerFilter, shipownerPendingMap, mscStats, chartData]);
 
+  const handleSelectShipowner = (name: string) => {
+    setSelectedBarShipowner(name);
+    setChartViewMode('breakout');
+    if (onSelectShipowner) onSelectShipowner(name);
+  };
+
+  // Detailed quantity breakout by warehouse for the active focus shipowner
+  const warehouseBreakoutData = useMemo(() => {
+    if (!activeFocusItem) return [];
+    const list: {
+      warehouse: string;
+      count: number;
+      category: 'bonded' | 'general';
+      categoryName: string;
+      fill: string;
+      percentage: number;
+    }[] = [];
+
+    const total = activeFocusItem.totalPending || 1;
+
+    // Bonded Warehouses (Port Terminals)
+    Object.entries(activeFocusItem.bondedBreakdown || {}).forEach(([wh, rawCnt]) => {
+      const cnt = Number(rawCnt) || 0;
+      if (cnt > 0) {
+        list.push({
+          warehouse: wh,
+          count: cnt,
+          category: 'bonded',
+          categoryName: 'Bonded Warehouse (Alfandegado)',
+          fill: '#0284C7',
+          percentage: Number(((cnt / total) * 100).toFixed(1))
+        });
+      }
+    });
+
+    // General Warehouses (Armazéns Gerais)
+    Object.entries(activeFocusItem.generalBreakdown || {}).forEach(([wh, rawCnt]) => {
+      const cnt = Number(rawCnt) || 0;
+      if (cnt > 0) {
+        list.push({
+          warehouse: wh,
+          count: cnt,
+          category: 'general',
+          categoryName: 'General Warehouse (Armazém Geral)',
+          fill: '#9333EA',
+          percentage: Number(((cnt / total) * 100).toFixed(1))
+        });
+      }
+    });
+
+    return list.sort((a, b) => b.count - a.count);
+  }, [activeFocusItem]);
+
   // Modal filtered shipments for drilldown
   const modalShipments = useMemo(() => {
     if (!detailModalShipowner) return [];
@@ -478,205 +534,472 @@ export const ShipownerWarehousePendingChart: React.FC<ShipownerWarehousePendingC
         </div>
 
         <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200/70">
-          <p className="text-[10px] font-black uppercase tracking-wider text-amber-800">MSC Pending Units</p>
+          <p className="text-[10px] font-black uppercase tracking-wider text-amber-800">
+            {activeFocusItem ? `${activeFocusItem.shipowner} Focus Units` : 'Shipowner Focus'}
+          </p>
           <div className="flex items-baseline gap-2 mt-1">
-            <h4 className="text-2xl font-display font-black text-amber-900">{mscStats ? mscStats.totalPending.toLocaleString() : 0}</h4>
+            <h4 className="text-2xl font-display font-black text-amber-900">
+              {activeFocusItem ? activeFocusItem.totalPending.toLocaleString() : 0}
+            </h4>
             <span className="text-[11px] font-bold text-amber-700 font-mono">
-              {mscStats && globalStats.totalPending > 0 ? `${((mscStats.totalPending / globalStats.totalPending) * 100).toFixed(0)}% share` : '0%'}
+              {activeFocusItem && globalStats.totalPending > 0
+                ? `${((activeFocusItem.totalPending / globalStats.totalPending) * 100).toFixed(0)}% share`
+                : '0%'}
             </span>
           </div>
           <p className="text-[10px] text-amber-700 mt-1 flex items-center gap-1">
             <AlertTriangle className="w-3 h-3 text-amber-600" />
-            {mscStats ? `${mscStats.overdueCount} overdue / ${mscStats.urgentCount} urgent return` : 'No MSC data'}
+            {activeFocusItem
+              ? `${activeFocusItem.overdueCount} overdue / ${activeFocusItem.urgentCount} urgent return`
+              : 'No shipowner selected'}
           </p>
         </div>
       </div>
 
-      {/* 3. Main Bar Chart & MSC Priority Return Card */}
+      {/* Interactive Shipowner Selector Strip */}
+      <div className="bg-slate-50/80 p-3 rounded-2xl border border-slate-200/80 space-y-2">
+        <div className="flex items-center justify-between gap-2 px-1">
+          <span className="text-[11px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+            <Ship className="w-3.5 h-3.5 text-indigo-600" /> Click a Shipowner to View Warehouse Breakout:
+          </span>
+          <span className="text-[11px] text-slate-400 font-semibold">
+            {chartViewMode === 'breakout' && activeFocusItem ? (
+              <span className="text-indigo-600 font-bold">Showing: {activeFocusItem.shipowner}</span>
+            ) : (
+              'Comparing all lines'
+            )}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 custom-scrollbar">
+          <button
+            onClick={() => setChartViewMode('overview')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 flex items-center gap-1.5 border ${
+              chartViewMode === 'overview'
+                ? 'bg-slate-900 text-white border-slate-900 shadow-xs font-black'
+                : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200'
+            }`}
+          >
+            <Layers className="w-3.5 h-3.5" />
+            <span>All Shipowners Overview</span>
+          </button>
+
+          {chartData.map((item) => {
+            const isSelected = activeFocusItem?.shipowner === item.name && chartViewMode === 'breakout';
+            const isMsc = item.isMSC;
+            return (
+              <button
+                key={item.name}
+                onClick={() => handleSelectShipowner(item.name)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 flex items-center gap-1.5 border ${
+                  isSelected
+                    ? isMsc
+                      ? 'bg-amber-500 text-white border-amber-500 shadow-xs font-black'
+                      : 'bg-indigo-600 text-white border-indigo-600 shadow-xs font-black'
+                    : isMsc
+                    ? 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-200'
+                    : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200'
+                }`}
+              >
+                <span className="truncate">{item.name}</span>
+                {isMsc && <span className="text-[10px]">★</span>}
+                <span
+                  className={`font-mono text-[11px] px-1.5 py-0.5 rounded-md ${
+                    isSelected
+                      ? 'bg-white/20 text-white'
+                      : isMsc
+                      ? 'bg-amber-100 text-amber-900 font-bold'
+                      : 'bg-slate-100 text-slate-600'
+                  }`}
+                >
+                  {item.total.toLocaleString()}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 3. Main Bar Chart & Shipowner Priority Return Card */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* The Bar Chart: Bonded vs General Warehouses per Shipowner */}
+        {/* The Bar Chart: Dynamically switches between Warehouse Breakout for selected shipowner & All Shipowners Overview */}
         <div className="lg:col-span-8 bg-slate-50/60 rounded-3xl p-6 border border-slate-200/80">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
             <div>
-              <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
-                <span>Shipowner Pending Volume by Warehouse Type</span>
-              </h3>
-              <p className="text-[11px] text-slate-500 font-medium mt-0.5">
-                Click any bar to drill down into specific container numbers and return status
-              </p>
+              {chartViewMode === 'breakout' && activeFocusItem ? (
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+                      <BarChart3 className="w-4 h-4 text-indigo-600" />
+                      <span>Warehouse Quantity Breakout:</span>
+                      <span className="text-indigo-600 underline font-black">
+                        {activeFocusItem.shipowner}
+                      </span>
+                    </h3>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-black bg-indigo-100 text-indigo-800 border border-indigo-200">
+                      {activeFocusItem.totalPending.toLocaleString()} CNTRs
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                    Click any warehouse bar to view container list. Click another shipowner above to change breakout.
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+                    <BarChart3 className="w-4 h-4 text-indigo-600" />
+                    <span>Shipowner Pending Volume by Warehouse Type</span>
+                  </h3>
+                  <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                    Click any bar or shipowner button above to drill into its warehouse quantity breakout
+                  </p>
+                </div>
+              )}
             </div>
             
-            {/* Chart Legend */}
-            <div className="flex items-center gap-4 text-xs font-bold">
-              <div className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-md bg-sky-500"></span>
-                <span className="text-slate-700">Bonded Warehouse</span>
+            {/* View Mode & Legend */}
+            <div className="flex items-center gap-3 flex-wrap">
+              {/* Toggle Breakout vs Overview */}
+              <div className="flex items-center bg-white p-1 rounded-xl text-xs font-bold border border-slate-200 shadow-2xs">
+                <button
+                  onClick={() => setChartViewMode('breakout')}
+                  className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
+                    chartViewMode === 'breakout'
+                      ? 'bg-indigo-600 text-white shadow-xs font-black'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <Warehouse className="w-3 h-3" />
+                  <span>Breakout</span>
+                </button>
+                <button
+                  onClick={() => setChartViewMode('overview')}
+                  className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
+                    chartViewMode === 'overview'
+                      ? 'bg-indigo-600 text-white shadow-xs font-black'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <Layers className="w-3 h-3" />
+                  <span>All Lines</span>
+                </button>
               </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-md bg-purple-600"></span>
-                <span className="text-slate-700">General Warehouse</span>
+
+              {/* Chart Legend */}
+              <div className="flex items-center gap-3 text-xs font-bold bg-white/70 px-2.5 py-1 rounded-xl border border-slate-200/60">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-md bg-sky-500"></span>
+                  <span className="text-slate-700 text-[11px]">Bonded</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-md bg-purple-600"></span>
+                  <span className="text-slate-700 text-[11px]">General</span>
+                </div>
               </div>
             </div>
           </div>
 
           <div className="h-[360px] w-full">
-            {chartData.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-slate-400">
-                <Warehouse className="w-10 h-10 mb-2 opacity-50" />
-                <p className="font-bold text-sm">No pending containers found in this view</p>
-                <p className="text-xs mt-1">All containers have been delivered to BYD or filter returned zero results</p>
-              </div>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={chartData}
-                  margin={{ top: 25, right: 15, left: -10, bottom: 40 }}
-                  onClick={(state) => {
-                    if (state && state.activePayload && state.activePayload.length) {
-                      const clicked = state.activePayload[0].payload.name;
-                      setSelectedBarShipowner(clicked);
-                    }
-                  }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
-                  <XAxis
-                    dataKey="name"
-                    tick={(props) => {
-                      const { x, y, payload } = props;
-                      const isMSC = payload.value.includes('MSC');
-                      const isSelected = selectedBarShipowner === payload.value;
-                      return (
-                        <g transform={`translate(${x},${y})`}>
-                          <text
-                            x={0}
-                            y={0}
-                            dy={16}
-                            textAnchor="end"
-                            transform="rotate(-25)"
-                            fontSize={11}
-                            fontWeight={isMSC || isSelected ? 800 : 600}
-                            fill={isMSC ? '#D97706' : isSelected ? '#4F46E5' : '#475569'}
-                          >
-                            {payload.value} {isMSC ? '★' : ''}
-                          </text>
-                        </g>
-                      );
-                    }}
-                    interval={0}
-                    height={60}
-                    tickLine={false}
-                  />
-                  <YAxis
-                    tick={{ fill: '#64748B', fontSize: 11, fontWeight: 600 }}
-                    tickLine={false}
-                    axisLine={false}
-                    tickFormatter={(val) => String(val)}
-                  />
-                  <Tooltip
-                    cursor={{ fill: 'rgba(226, 232, 240, 0.4)' }}
-                    content={({ active, payload }) => {
-                      if (active && payload && payload.length) {
-                        const data = payload[0].payload;
-                        const isMSC = data.name.includes('MSC');
-                        return (
-                          <div className="bg-slate-900 text-white p-4 rounded-2xl shadow-xl text-xs space-y-2.5 border border-slate-700 min-w-[220px]">
-                            <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-2">
-                              <p className="font-black text-sm text-sky-400 flex items-center gap-1.5">
-                                <Ship className="w-4 h-4 text-sky-400" />
-                                <span>{data.name}</span>
-                              </p>
-                              {isMSC && (
-                                <span className="bg-amber-500/30 text-amber-300 text-[10px] font-bold px-2 py-0.5 rounded border border-amber-400/40">
-                                  MSC Fleet
-                                </span>
-                              )}
-                            </div>
-
-                            <div className="space-y-1.5">
-                              <div className="flex justify-between items-center text-slate-300">
-                                <span className="flex items-center gap-1.5">
-                                  <span className="w-2.5 h-2.5 rounded bg-sky-500"></span>
-                                  <span>Bonded Warehouse:</span>
-                                </span>
-                                <span className="font-mono font-bold text-white">{data.bonded.toLocaleString()}</span>
-                              </div>
-                              <div className="flex justify-between items-center text-slate-300">
-                                <span className="flex items-center gap-1.5">
-                                  <span className="w-2.5 h-2.5 rounded bg-purple-500"></span>
-                                  <span>General Warehouse:</span>
-                                </span>
-                                <span className="font-mono font-bold text-white">{data.general.toLocaleString()}</span>
-                              </div>
-                              <div className="pt-1.5 border-t border-slate-800 flex justify-between items-center font-bold">
-                                <span className="text-amber-400">Total Pending Return:</span>
-                                <span className="text-white font-mono text-sm">{data.total.toLocaleString()}</span>
-                              </div>
-                            </div>
-
-                            {(data.overdue > 0 || data.urgent > 0) && (
-                              <div className="pt-1.5 border-t border-slate-800 flex items-center justify-between text-[11px]">
-                                <span className="text-rose-400 font-bold flex items-center gap-1">
-                                  <AlertTriangle className="w-3 h-3" /> Overdue Free Time:
-                                </span>
-                                <span className="text-rose-400 font-mono font-bold">{data.overdue} units</span>
-                              </div>
-                            )}
-
-                            <p className="text-[10px] text-slate-400 pt-1 italic text-center">
-                              Click bar to inspect warehouse breakdown
-                            </p>
-                          </div>
-                        );
+            {chartViewMode === 'breakout' ? (
+              /* --- WAREHOUSE QUANTITY BREAKOUT FOR SELECTED SHIPOWNER --- */
+              warehouseBreakoutData.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-slate-400">
+                  <Warehouse className="w-10 h-10 mb-2 opacity-50" />
+                  <p className="font-bold text-sm">No pending warehouse containers for {activeFocusItem?.shipowner}</p>
+                  <p className="text-xs mt-1">Select another shipowner or switch to All Shipowners view</p>
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={warehouseBreakoutData}
+                    margin={{ top: 25, right: 15, left: -10, bottom: 45 }}
+                    onClick={(state) => {
+                      if (state && state.activePayload && state.activePayload.length && activeFocusItem) {
+                        const clickedWh = state.activePayload[0].payload.warehouse;
+                        setDetailModalShipowner(activeFocusItem.shipowner);
+                        setModalSearch(clickedWh);
+                        setModalPage(1);
                       }
-                      return null;
                     }}
-                  />
+                  >
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                    <XAxis
+                      dataKey="warehouse"
+                      tick={(props) => {
+                        const { x, y, payload } = props;
+                        return (
+                          <g transform={`translate(${x},${y})`}>
+                            <text
+                              x={0}
+                              y={0}
+                              dy={16}
+                              textAnchor="end"
+                              transform="rotate(-25)"
+                              fontSize={11}
+                              fontWeight={700}
+                              fill="#334155"
+                            >
+                              {payload.value}
+                            </text>
+                          </g>
+                        );
+                      }}
+                      interval={0}
+                      height={65}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      tick={{ fill: '#64748B', fontSize: 11, fontWeight: 600 }}
+                      tickLine={false}
+                      axisLine={false}
+                      tickFormatter={(val) => String(val)}
+                    />
+                    <Tooltip
+                      cursor={{ fill: 'rgba(226, 232, 240, 0.4)' }}
+                      content={({ active, payload }) => {
+                        if (active && payload && payload.length && activeFocusItem) {
+                          const data = payload[0].payload;
+                          const isBonded = data.category === 'bonded';
+                          return (
+                            <div className="bg-slate-900 text-white p-4 rounded-2xl shadow-xl text-xs space-y-2.5 border border-slate-700 min-w-[240px]">
+                              <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-2">
+                                <p className="font-black text-sm text-white flex items-center gap-1.5">
+                                  {isBonded ? (
+                                    <Warehouse className="w-4 h-4 text-sky-400" />
+                                  ) : (
+                                    <Building2 className="w-4 h-4 text-purple-400" />
+                                  )}
+                                  <span>{data.warehouse}</span>
+                                </p>
+                                <span
+                                  className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
+                                    isBonded
+                                      ? 'bg-sky-500/20 text-sky-300 border-sky-400/30'
+                                      : 'bg-purple-500/20 text-purple-300 border-purple-400/30'
+                                  }`}
+                                >
+                                  {isBonded ? 'Bonded WH' : 'General WH'}
+                                </span>
+                              </div>
 
-                  {chartMode === 'stacked' ? (
-                    <>
-                      <Bar dataKey="bonded" stackId="pending" fill="#0284C7" radius={[0, 0, 0, 0]} maxBarSize={44}>
-                        {chartData.map((entry, index) => (
-                          <Cell
-                            key={`bonded-${index}`}
-                            fill={entry.name.includes('MSC') ? '#0284C7' : '#38BDF8'}
-                            stroke={selectedBarShipowner === entry.name ? '#0F172A' : 'none'}
-                            strokeWidth={selectedBarShipowner === entry.name ? 2 : 0}
-                          />
-                        ))}
-                      </Bar>
-                      <Bar dataKey="general" stackId="pending" fill="#9333EA" radius={[6, 6, 0, 0]} maxBarSize={44}>
-                        {chartData.map((entry, index) => (
-                          <Cell
-                            key={`general-${index}`}
-                            fill={entry.name.includes('MSC') ? '#7E22CE' : '#C084FC'}
-                            stroke={selectedBarShipowner === entry.name ? '#0F172A' : 'none'}
-                            strokeWidth={selectedBarShipowner === entry.name ? 2 : 0}
-                          />
-                        ))}
-                      </Bar>
-                    </>
-                  ) : (
-                    <>
-                      <Bar dataKey="bonded" fill="#0284C7" radius={[6, 6, 0, 0]} maxBarSize={24} name="Bonded" />
-                      <Bar dataKey="general" fill="#9333EA" radius={[6, 6, 0, 0]} maxBarSize={24} name="General" />
-                    </>
-                  )}
-                </BarChart>
-              </ResponsiveContainer>
+                              <div className="space-y-1.5">
+                                <div className="flex justify-between items-center text-slate-300">
+                                  <span>Shipowner:</span>
+                                  <span className="font-bold text-amber-400">{activeFocusItem.shipowner}</span>
+                                </div>
+                                <div className="flex justify-between items-center text-slate-300">
+                                  <span>Pending Containers:</span>
+                                  <span className="font-mono font-black text-base text-white">
+                                    {data.count.toLocaleString()} CNTRs
+                                  </span>
+                                </div>
+                                <div className="flex justify-between items-center text-slate-400 text-[11px]">
+                                  <span>Share of {activeFocusItem.shipowner}:</span>
+                                  <span className="font-mono font-bold text-slate-200">{data.percentage}%</span>
+                                </div>
+                              </div>
+
+                              <p className="text-[10px] text-indigo-300 pt-1 border-t border-slate-800 italic text-center">
+                                Click bar to inspect container list for this warehouse
+                              </p>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                    <Bar dataKey="count" radius={[6, 6, 0, 0]} maxBarSize={48} className="cursor-pointer">
+                      {warehouseBreakoutData.map((entry, index) => (
+                        <Cell
+                          key={`wh-${index}`}
+                          fill={entry.fill}
+                          className="cursor-pointer hover:opacity-85 transition-opacity"
+                        />
+                      ))}
+                      <LabelList
+                        dataKey="count"
+                        position="top"
+                        fill="#0F172A"
+                        fontSize={11}
+                        fontWeight={800}
+                        formatter={(val: any) => Number(val).toLocaleString()}
+                      />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )
+            ) : (
+              /* --- ALL SHIPOWNERS COMPARISON VIEW --- */
+              chartData.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-slate-400">
+                  <Warehouse className="w-10 h-10 mb-2 opacity-50" />
+                  <p className="font-bold text-sm">No pending containers found in this view</p>
+                  <p className="text-xs mt-1">All containers have been delivered to BYD or filter returned zero results</p>
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={chartData}
+                    margin={{ top: 25, right: 15, left: -10, bottom: 40 }}
+                    onClick={(state) => {
+                      if (state && state.activePayload && state.activePayload.length) {
+                        const clicked = state.activePayload[0].payload.name;
+                        handleSelectShipowner(clicked);
+                      }
+                    }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                    <XAxis
+                      dataKey="name"
+                      tick={(props) => {
+                        const { x, y, payload } = props;
+                        const isMSC = payload.value.includes('MSC');
+                        const isSelected = activeFocusItem?.shipowner === payload.value;
+                        return (
+                          <g transform={`translate(${x},${y})`}>
+                            <text
+                              x={0}
+                              y={0}
+                              dy={16}
+                              textAnchor="end"
+                              transform="rotate(-25)"
+                              fontSize={11}
+                              fontWeight={isMSC || isSelected ? 800 : 600}
+                              fill={isMSC ? '#D97706' : isSelected ? '#4F46E5' : '#475569'}
+                              className="cursor-pointer"
+                            >
+                              {payload.value} {isMSC ? '★' : ''}
+                            </text>
+                          </g>
+                        );
+                      }}
+                      interval={0}
+                      height={60}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      tick={{ fill: '#64748B', fontSize: 11, fontWeight: 600 }}
+                      tickLine={false}
+                      axisLine={false}
+                      tickFormatter={(val) => String(val)}
+                    />
+                    <Tooltip
+                      cursor={{ fill: 'rgba(226, 232, 240, 0.4)' }}
+                      content={({ active, payload }) => {
+                        if (active && payload && payload.length) {
+                          const data = payload[0].payload;
+                          const isMSC = data.name.includes('MSC');
+                          return (
+                            <div className="bg-slate-900 text-white p-4 rounded-2xl shadow-xl text-xs space-y-2.5 border border-slate-700 min-w-[220px]">
+                              <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-2">
+                                <p className="font-black text-sm text-sky-400 flex items-center gap-1.5">
+                                  <Ship className="w-4 h-4 text-sky-400" />
+                                  <span>{data.name}</span>
+                                </p>
+                                {isMSC && (
+                                  <span className="bg-amber-500/30 text-amber-300 text-[10px] font-bold px-2 py-0.5 rounded border border-amber-400/40">
+                                    MSC Fleet
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="space-y-1.5">
+                                <div className="flex justify-between items-center text-slate-300">
+                                  <span className="flex items-center gap-1.5">
+                                    <span className="w-2.5 h-2.5 rounded bg-sky-500"></span>
+                                    <span>Bonded Warehouse:</span>
+                                  </span>
+                                  <span className="font-mono font-bold text-white">{data.bonded.toLocaleString()}</span>
+                                </div>
+                                <div className="flex justify-between items-center text-slate-300">
+                                  <span className="flex items-center gap-1.5">
+                                    <span className="w-2.5 h-2.5 rounded bg-purple-500"></span>
+                                    <span>General Warehouse:</span>
+                                  </span>
+                                  <span className="font-mono font-bold text-white">{data.general.toLocaleString()}</span>
+                                </div>
+                                <div className="pt-1.5 border-t border-slate-800 flex justify-between items-center font-bold">
+                                  <span className="text-amber-400">Total Pending Return:</span>
+                                  <span className="text-white font-mono text-sm">{data.total.toLocaleString()}</span>
+                                </div>
+                              </div>
+
+                              {(data.overdue > 0 || data.urgent > 0) && (
+                                <div className="pt-1.5 border-t border-slate-800 flex items-center justify-between text-[11px]">
+                                  <span className="text-rose-400 font-bold flex items-center gap-1">
+                                    <AlertTriangle className="w-3 h-3" /> Overdue Free Time:
+                                  </span>
+                                  <span className="text-rose-400 font-mono font-bold">{data.overdue} units</span>
+                                </div>
+                              )}
+
+                              <p className="text-[10px] text-amber-300 pt-1 italic text-center border-t border-slate-800 font-bold">
+                                ➔ Click bar to see warehouse quantity breakout for {data.name}
+                              </p>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+
+                    {chartMode === 'stacked' ? (
+                      <>
+                        <Bar dataKey="bonded" stackId="pending" fill="#0284C7" radius={[0, 0, 0, 0]} maxBarSize={44} className="cursor-pointer">
+                          {chartData.map((entry, index) => (
+                            <Cell
+                              key={`bonded-${index}`}
+                              fill={entry.name.includes('MSC') ? '#0284C7' : '#38BDF8'}
+                              stroke={activeFocusItem?.shipowner === entry.name ? '#0F172A' : 'none'}
+                              strokeWidth={activeFocusItem?.shipowner === entry.name ? 2 : 0}
+                            />
+                          ))}
+                        </Bar>
+                        <Bar dataKey="general" stackId="pending" fill="#9333EA" radius={[6, 6, 0, 0]} maxBarSize={44} className="cursor-pointer">
+                          {chartData.map((entry, index) => (
+                            <Cell
+                              key={`general-${index}`}
+                              fill={entry.name.includes('MSC') ? '#7E22CE' : '#C084FC'}
+                              stroke={activeFocusItem?.shipowner === entry.name ? '#0F172A' : 'none'}
+                              strokeWidth={activeFocusItem?.shipowner === entry.name ? 2 : 0}
+                            />
+                          ))}
+                        </Bar>
+                      </>
+                    ) : (
+                      <>
+                        <Bar dataKey="bonded" fill="#0284C7" radius={[6, 6, 0, 0]} maxBarSize={24} name="Bonded" className="cursor-pointer" />
+                        <Bar dataKey="general" fill="#9333EA" radius={[6, 6, 0, 0]} maxBarSize={24} name="General" className="cursor-pointer" />
+                      </>
+                    )}
+                  </BarChart>
+                </ResponsiveContainer>
+              )
             )}
           </div>
 
-          <div className="flex items-center justify-between pt-3 border-t border-slate-200/70 text-[11px] text-slate-500">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between pt-3 border-t border-slate-200/70 text-[11px] text-slate-500 gap-2">
             <span>
-              Showing {chartData.length} shipowners with pending delivery units
+              {chartViewMode === 'breakout' && activeFocusItem ? (
+                <span>
+                  Showing <strong>{warehouseBreakoutData.length}</strong> staging warehouses for{' '}
+                  <strong className="text-slate-800">{activeFocusItem.shipowner}</strong> (
+                  <strong className="text-sky-700">{activeFocusItem.bondedCount}</strong> Bonded /{' '}
+                  <strong className="text-purple-700">{activeFocusItem.generalCount}</strong> General)
+                </span>
+              ) : (
+                <span>Showing {chartData.length} shipowners with pending delivery units</span>
+              )}
             </span>
-            <span className="font-bold text-slate-700">
-              Blue = Bonded Port Terminals | Purple = General Warehouses
+            <span className="font-bold text-slate-700 flex items-center gap-2">
+              <span>Blue = Bonded Terminals</span>
+              <span>•</span>
+              <span>Purple = General Warehouses</span>
             </span>
           </div>
         </div>
 
-        {/* Dedicated MSC Container Return Priority Panel */}
+        {/* Dedicated Shipowner Container Return Priority Panel (Dynamically changes with selected shipowner) */}
         <div className="lg:col-span-4 bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-slate-50 rounded-3xl p-6 border-2 border-amber-300/80 shadow-xs flex flex-col justify-between space-y-6">
           <div className="space-y-4">
             {/* Card Header */}
@@ -686,43 +1009,55 @@ export const ShipownerWarehousePendingChart: React.FC<ShipownerWarehousePendingC
                   <Ship className="w-5 h-5" />
                 </div>
                 <div>
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 flex-wrap">
                     <h3 className="text-base font-black text-slate-900 tracking-tight">
-                      MSC Container Return
+                      {activeFocusItem ? `${activeFocusItem.shipowner} Container Return` : 'Container Return'}
                     </h3>
                     <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-amber-200 text-amber-900">
-                      Priority Line
+                      {activeFocusItem?.shipowner.includes('MSC') ? 'Priority Line' : 'Selected Carrier'}
                     </span>
                   </div>
                   <p className="text-[11px] text-amber-900/70 font-bold">
-                    Official return tracking for Mediterranean Shipping Co.
+                    {activeFocusItem
+                      ? `Official return tracking & staging for ${activeFocusItem.shipowner}`
+                      : 'Select a shipowner to view details'}
                   </p>
                 </div>
               </div>
             </div>
 
-            {/* MSC Overview Stats Box */}
-            {mscStats ? (
+            {/* Overview Stats Box for Active Focus Shipowner */}
+            {activeFocusItem ? (
               <div className="space-y-3">
                 <div className="bg-white/90 backdrop-blur-xs rounded-2xl p-4 border border-amber-200 shadow-xs">
                   <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                    <span className="text-xs font-bold text-slate-600">Total MSC Pending Delivery:</span>
+                    <span className="text-xs font-bold text-slate-600">
+                      Total {activeFocusItem.shipowner} Pending Delivery:
+                    </span>
                     <span className="text-xl font-display font-black text-amber-600">
-                      {mscStats.totalPending.toLocaleString()} CNTRs
+                      {activeFocusItem.totalPending.toLocaleString()} CNTRs
                     </span>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3 pt-3">
                     <div className="p-2.5 rounded-xl bg-sky-50 border border-sky-200">
                       <p className="text-[10px] font-black uppercase tracking-wider text-sky-700">At Bonded Terminals</p>
-                      <p className="text-lg font-black text-sky-900 mt-0.5">{mscStats.bondedCount.toLocaleString()}</p>
-                      <p className="text-[10px] text-sky-600 font-medium">TECON / Intermarítima</p>
+                      <p className="text-lg font-black text-sky-900 mt-0.5">
+                        {activeFocusItem.bondedCount.toLocaleString()}
+                      </p>
+                      <p className="text-[10px] text-sky-600 font-medium truncate">
+                        {Object.keys(activeFocusItem.bondedBreakdown).slice(0, 2).join(' / ') || 'Port Terminals'}
+                      </p>
                     </div>
 
                     <div className="p-2.5 rounded-xl bg-purple-50 border border-purple-200">
                       <p className="text-[10px] font-black uppercase tracking-wider text-purple-700">At General WHs</p>
-                      <p className="text-lg font-black text-purple-900 mt-0.5">{mscStats.generalCount.toLocaleString()}</p>
-                      <p className="text-[10px] text-purple-600 font-medium">CTS J&W / Logic / CDEX</p>
+                      <p className="text-lg font-black text-purple-900 mt-0.5">
+                        {activeFocusItem.generalCount.toLocaleString()}
+                      </p>
+                      <p className="text-[10px] text-purple-600 font-medium truncate">
+                        {Object.keys(activeFocusItem.generalBreakdown).slice(0, 2).join(' / ') || 'Warehouses'}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -739,72 +1074,91 @@ export const ShipownerWarehousePendingChart: React.FC<ShipownerWarehousePendingC
                       <span className="flex items-center gap-1.5 font-bold text-rose-700">
                         <Flame className="w-3.5 h-3.5 text-rose-600" /> Overdue Free Time:
                       </span>
-                      <span className="font-mono font-black text-rose-700">{mscStats.overdueCount} CNTRs</span>
+                      <span className="font-mono font-black text-rose-700">{activeFocusItem.overdueCount} CNTRs</span>
                     </div>
 
                     <div className="flex items-center justify-between p-2 rounded-xl bg-amber-50 border border-amber-200">
                       <span className="flex items-center gap-1.5 font-bold text-amber-800">
                         <Clock className="w-3.5 h-3.5 text-amber-600" /> Critical (≤ 4 days left):
                       </span>
-                      <span className="font-mono font-black text-amber-800">{mscStats.urgentCount} CNTRs</span>
+                      <span className="font-mono font-black text-amber-800">{activeFocusItem.urgentCount} CNTRs</span>
                     </div>
 
                     <div className="flex items-center justify-between p-2 rounded-xl bg-emerald-50 border border-emerald-200">
                       <span className="flex items-center gap-1.5 font-bold text-emerald-800">
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Safe Return Window:
                       </span>
-                      <span className="font-mono font-black text-emerald-800">{mscStats.safeCount} CNTRs</span>
+                      <span className="font-mono font-black text-emerald-800">{activeFocusItem.safeCount} CNTRs</span>
                     </div>
                   </div>
                 </div>
 
-                {/* Specific Warehouse Location Breakdown for MSC */}
+                {/* Specific Warehouse Location Breakdown for Selected Shipowner */}
                 <div className="space-y-1.5 pt-2">
                   <p className="text-[11px] font-black uppercase tracking-wider text-slate-700">
-                    MSC Top Staging Locations:
+                    {activeFocusItem.shipowner} Top Staging Locations:
                   </p>
                   <div className="flex flex-wrap gap-1.5">
-                    {Object.entries(mscStats.bondedBreakdown).map(([wh, cnt]) => (
-                      <span key={wh} className="px-2 py-1 rounded-lg text-[10px] font-bold bg-sky-100 text-sky-800 border border-sky-200">
+                    {Object.entries(activeFocusItem.bondedBreakdown).map(([wh, cnt]) => (
+                      <button
+                        key={wh}
+                        onClick={() => {
+                          setDetailModalShipowner(activeFocusItem.shipowner);
+                          setModalSearch(wh);
+                          setModalPage(1);
+                        }}
+                        className="px-2 py-1 rounded-lg text-[10px] font-bold bg-sky-100 hover:bg-sky-200 text-sky-800 border border-sky-200 cursor-pointer transition-colors"
+                        title={`View containers at ${wh}`}
+                      >
                         {wh}: <strong className="font-mono">{cnt}</strong>
-                      </span>
+                      </button>
                     ))}
-                    {Object.entries(mscStats.generalBreakdown).map(([wh, cnt]) => (
-                      <span key={wh} className="px-2 py-1 rounded-lg text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200">
+                    {Object.entries(activeFocusItem.generalBreakdown).map(([wh, cnt]) => (
+                      <button
+                        key={wh}
+                        onClick={() => {
+                          setDetailModalShipowner(activeFocusItem.shipowner);
+                          setModalSearch(wh);
+                          setModalPage(1);
+                        }}
+                        className="px-2 py-1 rounded-lg text-[10px] font-bold bg-purple-100 hover:bg-purple-200 text-purple-800 border border-purple-200 cursor-pointer transition-colors"
+                        title={`View containers at ${wh}`}
+                      >
                         {wh}: <strong className="font-mono">{cnt}</strong>
-                      </span>
+                      </button>
                     ))}
                   </div>
                 </div>
               </div>
             ) : (
               <div className="p-4 bg-white rounded-2xl text-center text-slate-400">
-                <p className="font-bold text-xs">No active MSC shipments in this period filter</p>
+                <p className="font-bold text-xs">No active shipments in this period filter</p>
               </div>
             )}
           </div>
 
-          {/* Action Buttons for MSC */}
+          {/* Action Buttons */}
           <div className="space-y-2 pt-2 border-t border-amber-200/80">
-            {mscStats && (
+            {activeFocusItem && (
               <>
                 <button
-                  onClick={() => handleExportReturnCSV('MSC', mscStats.shipments)}
+                  onClick={() => handleExportReturnCSV(activeFocusItem.shipowner, activeFocusItem.shipments)}
                   className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-sm transition-all cursor-pointer"
                 >
                   <FileSpreadsheet className="w-4 h-4" />
-                  <span>Download MSC Return Manifest (CSV)</span>
+                  <span>Download {activeFocusItem.shipowner} Return Manifest (CSV)</span>
                 </button>
 
                 <button
                   onClick={() => {
-                    setDetailModalShipowner(mscStats.shipowner);
+                    setDetailModalShipowner(activeFocusItem.shipowner);
                     setModalFilterLocation('ALL');
+                    setModalSearch('');
                     setModalPage(1);
                   }}
                   className="w-full flex items-center justify-center gap-1.5 py-2 px-3 bg-white hover:bg-slate-100 text-slate-800 rounded-xl text-xs font-bold border border-slate-300 transition-all cursor-pointer"
                 >
-                  <span>View All {mscStats.totalPending} MSC Pending Containers</span>
+                  <span>View All {activeFocusItem.totalPending} {activeFocusItem.shipowner} Pending Containers</span>
                   <ChevronRight className="w-3.5 h-3.5" />
                 </button>
               </>
