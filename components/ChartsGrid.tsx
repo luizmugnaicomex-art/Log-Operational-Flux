@@ -352,7 +352,8 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                     cumulativeArrivals,
                     weeklyDelivered: delivered,
                     cumulativeDelivered,
-                    backlog
+                    backlog,
+                    sortKey: year * 100 + week
                 });
                 safetyCounter++;
             }
@@ -984,7 +985,7 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                     <ComposedChart 
                         data={cargoReadyData} 
                         margin={{ top: 20, right: 20, left: 10, bottom: 30 }}
-                        onClick={(state) => {
+                        onClick={(state: any) => {
                             if (state && state.activePayload && state.activePayload.length > 0) {
                                 if (onInventoryClick) onInventoryClick(state.activePayload[0].payload);
                             }
@@ -1075,7 +1076,7 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                             strokeDasharray={inventoryOnly ? "" : "5 5"}
                             dot={{ r: inventoryOnly ? 6 : 4, fill: '#7C3AED', stroke: '#fff', strokeWidth: 2 }}
                             activeDot={{ r: 9, stroke: '#C4B5FD', strokeWidth: 4, cursor: 'pointer', onClick: (e, payload: any) => onInventoryClick?.(payload.payload) }}
-                            onClick={(d) => {
+                            onClick={(d: any) => {
                                  if (d && d.payload) { onInventoryClick?.(d.payload); }
                                  else { onInventoryClick?.(d); }
                             }}
@@ -1113,13 +1114,15 @@ const ChartsGrid: React.FC<ChartsGridProps> = ({
                         <YAxis tick={{ fontSize: labelSize, fontWeight: 700, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
                         <Tooltip content={<CustomTooltip />} />
                         <Legend 
-                            wrapperStyle={{ fontSize: labelSize, fontWeight: 800, textTransform: 'uppercase', paddingTop: '30px' }} 
-                            payload={[
-                                { value: 'Arrivals', type: 'rect', color: '#1E293B' },
-                                { value: 'Delivered', type: 'line', color: '#10B981', strokeDasharray: '5 5' },
-                                { value: 'Backlog', type: 'line', color: '#EF4444' },
-                                { value: 'Terminal Capacity', type: 'line', color: '#DC2626', strokeDasharray: '5 5' }
-                            ]}
+                            {...({
+                                wrapperStyle: { fontSize: labelSize, fontWeight: 800, textTransform: 'uppercase', paddingTop: '30px' },
+                                payload: [
+                                    { value: 'Arrivals', type: 'rect', color: '#1E293B' },
+                                    { value: 'Delivered', type: 'line', color: '#10B981', strokeDasharray: '5 5' },
+                                    { value: 'Backlog', type: 'line', color: '#EF4444' },
+                                    { value: 'Terminal Capacity', type: 'line', color: '#DC2626', strokeDasharray: '5 5' }
+                                ]
+                            } as any)}
                         />
                         
                         <ReferenceLine 

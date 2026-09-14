@@ -261,7 +261,7 @@ export const DeliveriesView: React.FC<DeliveriesViewProps> = ({ shipments = [] }
                 t[wh.key] = 0;
             });
             dataByMonth.forEach(m => {
-                m.breakdown.forEach(item => {
+                m.breakdown.forEach((item: any) => {
                     t[item.key] = (t[item.key] || 0) + item.count;
                     if (item.type === 'bonded') bondedTotal += item.count;
                     else if (item.type === 'general') generalTotal += item.count;

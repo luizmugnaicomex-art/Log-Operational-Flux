@@ -33,9 +33,11 @@ import {
   Anchor,
   Sparkles,
   ArrowRight,
-  Filter
+  Filter,
+  FileSpreadsheet
 } from 'lucide-react';
 import { ChartData, Shipment } from '../types';
+import { CnyOperationalView } from './CnyOperationalView';
 
 interface CargoReadyDeliveredAnalysisProps {
   data: ChartData;
@@ -67,6 +69,7 @@ export const CargoReadyDeliveredAnalysis: React.FC<CargoReadyDeliveredAnalysisPr
   isStandalone = false
 }) => {
   // Interactive UI State Controls
+  const [viewMode, setViewMode] = useState<'chart' | 'cny'>('chart');
   const [granularity, setGranularity] = useState<'weeks' | 'days'>('weeks');
   const [metricUnit, setMetricUnit] = useState<'containers' | 'bls'>('containers');
   const [showInventoryOnly, setShowInventoryOnly] = useState<boolean>(false);
@@ -450,78 +453,108 @@ export const CargoReadyDeliveredAnalysis: React.FC<CargoReadyDeliveredAnalysisPr
 
         {/* Interactive Controls Bar */}
         <div className="flex flex-wrap items-center gap-2.5">
-          {/* Show Inventory Only Toggle */}
-          <label className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200/80 rounded-xl cursor-pointer transition-colors text-xs font-bold text-slate-700">
-            <input
-              type="checkbox"
-              checked={showInventoryOnly}
-              onChange={(e) => setShowInventoryOnly(e.target.checked)}
-              className="accent-indigo-600 rounded cursor-pointer w-4 h-4"
-            />
-            <span className="text-[11px] uppercase tracking-wider text-slate-600">Show Inventory Only</span>
-          </label>
-
-          {/* Metric Toggle: Containers (TEUs) vs BLs */}
-          <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/60 shadow-xs">
+          {/* View Mode Switcher: CHART VIEW vs CNY VIEW */}
+          <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/80 shadow-xs">
             <button
-              onClick={() => setMetricUnit('containers')}
-              className={`px-3 py-1.5 text-[11px] font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer ${
-                metricUnit === 'containers'
+              onClick={() => setViewMode('chart')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer ${
+                viewMode === 'chart'
                   ? 'bg-white text-indigo-600 shadow-xs'
                   : 'text-slate-500 hover:text-slate-800'
               }`}
             >
-              Containers (TEUs)
+              <BarChart3 className="w-3.5 h-3.5" />
+              <span>Chart View</span>
             </button>
             <button
-              onClick={() => setMetricUnit('bls')}
-              className={`px-3 py-1.5 text-[11px] font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer ${
-                metricUnit === 'bls'
-                  ? 'bg-white text-indigo-600 shadow-xs'
+              onClick={() => setViewMode('cny')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer ${
+                viewMode === 'cny'
+                  ? 'bg-indigo-600 text-white shadow-xs'
                   : 'text-slate-500 hover:text-slate-800'
               }`}
             >
-              BLs (Bills)
+              <FileSpreadsheet className="w-3.5 h-3.5" />
+              <span>CNY View</span>
             </button>
           </div>
 
-          {/* Granularity Toggle: Days vs Weeks */}
-          <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/60 shadow-xs">
-            <button
-              onClick={() => setGranularity('days')}
-              className={`px-3 py-1.5 text-[11px] font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer ${
-                granularity === 'days'
-                  ? 'bg-white text-indigo-600 shadow-xs'
-                  : 'text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              Days
-            </button>
-            <button
-              onClick={() => setGranularity('weeks')}
-              className={`px-3 py-1.5 text-[11px] font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer ${
-                granularity === 'weeks'
-                  ? 'bg-white text-indigo-600 shadow-xs'
-                  : 'text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              Weeks
-            </button>
-          </div>
+          {viewMode === 'chart' && (
+            <>
+              {/* Show Inventory Only Toggle */}
+              <label className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200/80 rounded-xl cursor-pointer transition-colors text-xs font-bold text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={showInventoryOnly}
+                  onChange={(e) => setShowInventoryOnly(e.target.checked)}
+                  className="accent-indigo-600 rounded cursor-pointer w-4 h-4"
+                />
+                <span className="text-[11px] uppercase tracking-wider text-slate-600">Show Inventory Only</span>
+              </label>
 
-          {/* Export CSV Button */}
-          <button
-            onClick={handleExportCSV}
-            title="Export time series to CSV"
-            className="p-2 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 border border-slate-200/80 rounded-xl transition-colors cursor-pointer"
-          >
-            <Download className="w-4 h-4" />
-          </button>
+              {/* Metric Toggle: Containers (TEUs) vs BLs */}
+              <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/60 shadow-xs">
+                <button
+                  onClick={() => setMetricUnit('containers')}
+                  className={`px-3 py-1.5 text-[11px] font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer ${
+                    metricUnit === 'containers'
+                      ? 'bg-white text-indigo-600 shadow-xs'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  Containers (TEUs)
+                </button>
+                <button
+                  onClick={() => setMetricUnit('bls')}
+                  className={`px-3 py-1.5 text-[11px] font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer ${
+                    metricUnit === 'bls'
+                      ? 'bg-white text-indigo-600 shadow-xs'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  BLs (Bills)
+                </button>
+              </div>
+
+              {/* Granularity Toggle: Days vs Weeks */}
+              <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/60 shadow-xs">
+                <button
+                  onClick={() => setGranularity('days')}
+                  className={`px-3 py-1.5 text-[11px] font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer ${
+                    granularity === 'days'
+                      ? 'bg-white text-indigo-600 shadow-xs'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  Days
+                </button>
+                <button
+                  onClick={() => setGranularity('weeks')}
+                  className={`px-3 py-1.5 text-[11px] font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer ${
+                    granularity === 'weeks'
+                      ? 'bg-white text-indigo-600 shadow-xs'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  Weeks
+                </button>
+              </div>
+
+              {/* Export CSV Button */}
+              <button
+                onClick={handleExportCSV}
+                title="Export time series to CSV"
+                className="p-2 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 border border-slate-200/80 rounded-xl transition-colors cursor-pointer"
+              >
+                <Download className="w-4 h-4" />
+              </button>
+            </>
+          )}
 
           {/* Maximize Toggle */}
           <button
             onClick={() => setIsMaximized(!isMaximized)}
-            title={isMaximized ? "Restore view" : "Maximize chart"}
+            title={isMaximized ? "Restore view" : "Maximize view"}
             className="p-2 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 border border-slate-200/80 rounded-xl transition-colors cursor-pointer"
           >
             {isMaximized ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
@@ -529,7 +562,14 @@ export const CargoReadyDeliveredAnalysis: React.FC<CargoReadyDeliveredAnalysisPr
         </div>
       </div>
 
-      {/* 2. Executive Alert & KPI Ribbon */}
+      {/* Main View Area: CNY VIEW vs CHART VIEW */}
+      {viewMode === 'cny' ? (
+        <div className="pt-2">
+          <CnyOperationalView shipments={shipments} data={data} />
+        </div>
+      ) : (
+        <>
+          {/* 2. Executive Alert & KPI Ribbon */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 py-4 my-2">
         {/* Metric 1: Current Inventory */}
         <div className="bg-slate-50/80 border border-slate-200/70 p-3.5 rounded-2xl flex flex-col justify-between">
@@ -661,7 +701,7 @@ export const CargoReadyDeliveredAnalysis: React.FC<CargoReadyDeliveredAnalysisPr
           <ComposedChart
             data={chartData}
             margin={{ top: 25, right: 25, left: 10, bottom: granularity === 'weeks' ? 35 : 55 }}
-            onClick={(state) => {
+            onClick={(state: any) => {
               if (state && state.activePayload && state.activePayload.length > 0) {
                 handleDataPointDrilldown(state.activePayload[0].payload);
               }
@@ -740,15 +780,14 @@ export const CargoReadyDeliveredAnalysis: React.FC<CargoReadyDeliveredAnalysisPr
               stroke="#64748B"
               strokeDasharray="4 4"
               strokeWidth={2}
-            >
-              <LabelList
-                value={`Equilibrium Capacity: ${effectiveCapacity.toLocaleString()}`}
-                position="right"
-                fill="#475569"
-                fontSize={isMaximized ? 11 : 9}
-                fontWeight={900}
-              />
-            </ReferenceLine>
+              label={{
+                value: `Equilibrium Capacity: ${effectiveCapacity.toLocaleString()}`,
+                position: "right",
+                fill: "#475569",
+                fontSize: isMaximized ? 11 : 9,
+                fontWeight: 900
+              }}
+            />
 
             {/* Critical Yard Saturation Warning Line at 2,000 TEUs */}
             <ReferenceLine
@@ -826,7 +865,7 @@ export const CargoReadyDeliveredAnalysis: React.FC<CargoReadyDeliveredAnalysisPr
                 cursor: 'pointer',
                 onClick: (e, payload: any) => handleDataPointDrilldown(payload.payload)
               }}
-              onClick={(d) => {
+              onClick={(d: any) => {
                 if (d && d.payload) handleDataPointDrilldown(d.payload);
                 else handleDataPointDrilldown(d);
               }}
@@ -897,6 +936,8 @@ export const CargoReadyDeliveredAnalysis: React.FC<CargoReadyDeliveredAnalysisPr
           <span className="text-slate-400 font-medium">Click any chart bar/point to trigger granular container manifest</span>
         </div>
       </div>
-    </div>
+    </>
+  )}
+</div>
   );
 };

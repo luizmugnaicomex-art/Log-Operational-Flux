@@ -462,7 +462,7 @@ export const PortYardOperationStatus: React.FC<PortYardOperationStatusProps> = (
                                 tickLine={false} 
                             />
                             <YAxis tick={{ fontSize: 10, fontWeight: 750, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-                            <Tooltip contentStyle={{ borderRadius: '1rem', border: 'none', shadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }} />
+                            <Tooltip contentStyle={{ borderRadius: '1rem', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }} />
                             <Legend wrapperStyle={{ fontSize: '10px', textTransform: 'uppercase', paddingTop: '10px' }} />
                             <ReferenceLine y={150} stroke="#EF4444" strokeWidth={2} strokeDasharray="4 4" label={{ value: 'Daily Goal: 150', fill: '#EF4444', fontSize: 10, fontWeight: 'bold', position: 'top' }} />
                             <ReferenceLine y={300} stroke="#4F46E5" strokeWidth={2} strokeDasharray="4 4" label={{ value: 'Challenge Goal: 300', fill: '#4F46E5', fontSize: 10, fontWeight: 'bold', position: 'top' }} />

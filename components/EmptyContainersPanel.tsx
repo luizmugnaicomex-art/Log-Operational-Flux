@@ -35,10 +35,11 @@ export const EmptyContainersPanel: React.FC<EmptyContainersPanelProps> = ({ isMi
             try {
                 const parsed = JSON.parse(stored);
                 if (parsed && typeof parsed === 'object') {
+                    const cleanList = (arr: any) => Array.isArray(arr) ? arr.filter((item: any) => item && typeof item === 'object' && typeof item.name === 'string') : [];
                     setData({
-                        bondedArea: Array.isArray(parsed.bondedArea) ? parsed.bondedArea : [],
-                        warehouse: Array.isArray(parsed.warehouse) ? parsed.warehouse : [],
-                        buffer: Array.isArray(parsed.buffer) ? parsed.buffer : [],
+                        bondedArea: cleanList(parsed.bondedArea),
+                        warehouse: cleanList(parsed.warehouse),
+                        buffer: cleanList(parsed.buffer),
                     });
                 }
             } catch (e) {
@@ -49,7 +50,11 @@ export const EmptyContainersPanel: React.FC<EmptyContainersPanelProps> = ({ isMi
 
     // Save to local storage when data changes
     useEffect(() => {
-        localStorage.setItem('emptyContainersDataV3', JSON.stringify(data));
+        try {
+            localStorage.setItem('emptyContainersDataV3', JSON.stringify(data));
+        } catch (e) {
+            console.error(e);
+        }
     }, [data]);
 
     const handleAdd = (sectionId: keyof StorageData) => {
@@ -104,8 +109,14 @@ export const EmptyContainersPanel: React.FC<EmptyContainersPanelProps> = ({ isMi
         { id: 'buffer', label: 'Buffer', icon: 'layers', bgClass: 'bg-emerald-50', textClass: 'text-emerald-500' },
     ];
 
-    const totalEmptyUnits = (Object.values(data || {}) as LocationCount[][]).reduce((acc, list) => acc + (Array.isArray(list) ? list.reduce((sum, item) => sum + (item.emptyCount || 0), 0) : 0), 0);
-    const totalFullUnits = (Object.values(data || {}) as LocationCount[][]).reduce((acc, list) => acc + (Array.isArray(list) ? list.reduce((sum, item) => sum + (item.fullCount || 0), 0) : 0), 0);
+    const totalEmptyUnits = (Object.values(data || {}) as LocationCount[][]).reduce(
+        (acc, list) => acc + (Array.isArray(list) ? list.filter(Boolean).reduce((sum, item) => sum + (item?.emptyCount || 0), 0) : 0),
+        0
+    );
+    const totalFullUnits = (Object.values(data || {}) as LocationCount[][]).reduce(
+        (acc, list) => acc + (Array.isArray(list) ? list.filter(Boolean).reduce((sum, item) => sum + (item?.fullCount || 0), 0) : 0),
+        0
+    );
 
     if (isMinimized) {
         return (
@@ -168,7 +179,7 @@ export const EmptyContainersPanel: React.FC<EmptyContainersPanelProps> = ({ isMi
                         
                         <div className="space-y-3">
                             <AnimatePresence>
-                                {(data[section.id] || []).map(loc => (
+                                {(data[section.id] || []).filter(loc => loc && loc.id).map(loc => (
                                     <motion.div 
                                         key={loc.id} 
                                         initial={{ opacity: 0, height: 0, scale: 0.95 }}
@@ -177,7 +188,7 @@ export const EmptyContainersPanel: React.FC<EmptyContainersPanelProps> = ({ isMi
                                         className="flex flex-col gap-3 bg-slate-50 p-4 rounded-[1.25rem] border border-slate-100 relative group overflow-hidden"
                                     >
                                         <div className="flex items-center justify-between border-b border-slate-200/50 pb-2">
-                                             <div className="text-xs font-black uppercase text-slate-700 truncate pr-6" title={loc.name}>{loc.name}</div>
+                                             <div className="text-xs font-black uppercase text-slate-700 truncate pr-6" title={loc.name || ''}>{loc.name || 'Unnamed'}</div>
                                              <button onClick={() => handleRemove(section.id, loc.id)} className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-red-500 w-6 h-6 flex items-center justify-center rounded-full hover:bg-red-50 bg-white shadow-sm border border-slate-200 cursor-pointer">
                                                  <span className="material-icons text-[14px]">close</span>
                                              </button>

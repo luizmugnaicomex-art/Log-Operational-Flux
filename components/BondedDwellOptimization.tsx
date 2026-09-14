@@ -831,11 +831,11 @@ export const BondedDwellOptimization: React.FC<BondedDwellOptimizationProps> = (
                   dataKey="count" 
                   name="Contêineres" 
                   radius={[8, 8, 0, 0]}
-                  onClick={(entry) => {
-                    const bucket = entry;
-                    if (bucket && onDrilldown) {
+                  onClick={(entry: any) => {
+                    const bucket = entry?.payload || entry;
+                    if (bucket && bucket.range && onDrilldown) {
                       const matched = filteredList.filter(s => s.dwellDays >= bucket.range[0] && s.dwellDays <= bucket.range[1]);
-                      onDrilldown(`Faixa de Dwell: ${bucket.name} (${bucket.tier})`, matched);
+                      onDrilldown(`Faixa de Dwell: ${bucket.name || ''} (${bucket.tier || ''})`, matched);
                     }
                   }}
                   className="cursor-pointer"

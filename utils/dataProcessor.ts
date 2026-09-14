@@ -451,6 +451,7 @@ export const processRawDataAsync = async (
             actualDepotReturnDate: actualDepotReturnDate,
             estimatedDepotDate: estimatedDepotDate,
             freeTimeDate: freeTimeDate,
+            deadlineReturnDate: deadlineReturnDate,
             totalCost: totalCostRaw,
             taxCost: taxCostRaw,
             extraCost: extraCostRaw,

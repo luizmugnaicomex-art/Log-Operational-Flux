@@ -713,7 +713,7 @@ export const ShipownerWarehousePendingChart: React.FC<ShipownerWarehousePendingC
                   <BarChart
                     data={warehouseBreakoutData}
                     margin={{ top: 25, right: 15, left: -10, bottom: 45 }}
-                    onClick={(state) => {
+                    onClick={(state: any) => {
                       if (state && state.activePayload && state.activePayload.length && activeFocusItem) {
                         const clickedWh = state.activePayload[0].payload.warehouse;
                         setDetailModalShipowner(activeFocusItem.shipowner);
@@ -841,7 +841,7 @@ export const ShipownerWarehousePendingChart: React.FC<ShipownerWarehousePendingC
                   <BarChart
                     data={chartData}
                     margin={{ top: 25, right: 15, left: -10, bottom: 40 }}
-                    onClick={(state) => {
+                    onClick={(state: any) => {
                       if (state && state.activePayload && state.activePayload.length) {
                         const clicked = state.activePayload[0].payload.name;
                         handleSelectShipowner(clicked);

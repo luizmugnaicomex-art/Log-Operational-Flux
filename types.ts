@@ -97,6 +97,7 @@ export interface Shipment {
   actualDepotReturnDate: Date | null;
   estimatedDepotDate: Date | null;
   freeTimeDate: Date | null;
+  deadlineReturnDate?: Date | null;
   totalCost: number;
   taxCost: number;
   extraCost: number;

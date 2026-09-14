@@ -22,13 +22,16 @@ import { ShipownersView } from "./components/ShipownersView";
 import LogisticsSuggestions from "./components/LogisticsSuggestions";
 import ResultsView from "./components/ResultsView";
 import { BondedDwellOptimization } from "./components/BondedDwellOptimization";
+import { DemurrageControlView } from "./components/DemurrageControlView";
+import { MpbaTechnicalView } from "./components/MpbaTechnicalView";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 
 // Utils
 import { processRawDataAsync, calculateDashboardData, toUTC, getISOWeek } from "./utils/dataProcessor";
 import { currencyFormatter } from "./utils/formatters";
 import { Shipment, SortConfig, PipelineWeek } from "./types";
 
-type MainView = "performance" | "results" | "bonded_dwell_optimization" | "shipowners" | "goods_analysis" | "current_inventory" | "vessel_matrix" | "port_yard_status" | "warehouse_distribution" | "general_warehouse_distribution" | "deliveries" | "suggestions";
+type MainView = "performance" | "results" | "bonded_dwell_optimization" | "shipowners" | "demurrage_control" | "goods_analysis" | "current_inventory" | "vessel_matrix" | "port_yard_status" | "warehouse_distribution" | "general_warehouse_distribution" | "deliveries" | "suggestions" | "mpba_technical";
 
 const isValidDate = (d: any): d is Date => d instanceof Date && !isNaN(d.getTime());
 
@@ -375,16 +378,18 @@ export default function App() {
   };
 
   const handleLeadTimeClick = (d: any) => {
+    if (!d) return;
     const targetDate = d?.date && isValidDate(new Date(d.date)) ? new Date(d.date).toISOString().split('T')[0] : null;
     if (!targetDate) return;
     const matching = filteredShipments.filter(s => {
       if (!s || !s.deliveryByd || !isValidDate(s.deliveryByd)) return false;
       return s.deliveryByd.toISOString().split('T')[0] === targetDate;
     });
-    setModalData({ isOpen: true, weekLabel: d.label, shipments: matching });
+    setModalData({ isOpen: true, weekLabel: d?.label || 'Lead Time', shipments: matching });
   };
 
   const handleCargoReadyClick = (d: any) => {
+    if (!d) return;
     const targetDate = d?.date && isValidDate(new Date(d.date)) ? new Date(d.date).toISOString().split('T')[0] : null;
     if (!targetDate) return;
     const matching = filteredShipments.filter(s => {
@@ -393,12 +398,13 @@ export default function App() {
     });
     setModalData({
       isOpen: true,
-      weekLabel: `Cargo Ready - ${d.label}`,
+      weekLabel: `Cargo Ready - ${d?.label || ''}`,
       shipments: matching
     });
   };
 
   const handleAtaClick = (d: any) => {
+    if (!d) return;
     const targetDate = d?.date && isValidDate(new Date(d.date)) ? new Date(d.date).toISOString().split('T')[0] : null;
     if (!targetDate) return;
     const matching = filteredShipments.filter(s => {
@@ -407,12 +413,13 @@ export default function App() {
     });
     setModalData({
       isOpen: true,
-      weekLabel: `Vessel Arrivals (ATA) - ${d.label}`,
+      weekLabel: `Vessel Arrivals (ATA) - ${d?.label || ''}`,
       shipments: matching
     });
   };
 
   const handleRampUpClick = (d: any) => {
+    if (!d) return;
     const period = d?.period || d?.payload?.period;
     if (!period) return;
     const matching = filteredShipments.filter(s => {
@@ -430,6 +437,7 @@ export default function App() {
   };
 
   const handleBondedInventoryClick = (d: any, type: string) => {
+    if (!d || !d.name) return;
     const todayUTC = toUTC(new Date());
 
     const matching = filteredShipments.filter(s => {
@@ -460,8 +468,10 @@ export default function App() {
   };
 
   const handleCargoReadyInflowClick = (d: any) => {
-    const isWeek = isWeekFormat(d.label);
-    const weekRange = isWeek ? getWeekRange(d.label) : null;
+    if (!d) return;
+    const label = d?.label || '';
+    const isWeek = isWeekFormat(label);
+    const weekRange = isWeek ? getWeekRange(label) : null;
     const targetDateStr = d?.date && isValidDate(new Date(d.date)) ? new Date(d.date).toISOString().split('T')[0] : null;
 
     const matching = filteredShipments.filter(s => {
@@ -474,14 +484,16 @@ export default function App() {
     });
     setModalData({
       isOpen: true,
-      weekLabel: `WEEK DRILLDOWN: Cargo Ready (${d.label})`,
+      weekLabel: `WEEK DRILLDOWN: Cargo Ready (${label})`,
       shipments: matching
     });
   };
 
   const handleDrainLineClick = (d: any) => {
-    const isWeek = isWeekFormat(d.label);
-    const weekRange = isWeek ? getWeekRange(d.label) : null;
+    if (!d) return;
+    const label = d?.label || '';
+    const isWeek = isWeekFormat(label);
+    const weekRange = isWeek ? getWeekRange(label) : null;
     const targetDateStr = d?.date && isValidDate(new Date(d.date)) ? new Date(d.date).toISOString().split('T')[0] : null;
 
     const matching = filteredShipments.filter(s => {
@@ -494,7 +506,7 @@ export default function App() {
     });
     setModalData({
       isOpen: true,
-      weekLabel: `WEEK DRILLDOWN: Delivered/Drain (${d.label})`,
+      weekLabel: `WEEK DRILLDOWN: Delivered/Drain (${label})`,
       shipments: matching
     });
   };
@@ -611,6 +623,7 @@ export default function App() {
               {[
                 { id: 'performance', label: 'Dashboard', icon: 'grid_view' },
                 { id: 'results', label: 'Results', icon: 'military_tech' },
+                { id: 'demurrage_control', label: 'Demurrage Control', icon: 'traffic' },
                 { id: 'bonded_dwell_optimization', label: 'Dwell & Tarifas', icon: 'timer' },
                 { id: 'shipowners', label: 'Shipowners', icon: 'directions_boat' },
                 { id: 'goods_analysis', label: 'Flow', icon: 'auto_graph' },
@@ -620,7 +633,8 @@ export default function App() {
                 { id: 'warehouse_distribution', label: 'Warehouse Dist', icon: 'domain' },
                 { id: 'general_warehouse_distribution', label: 'General Warehouse', icon: 'business' },
                 { id: 'deliveries', label: 'Deliveries', icon: 'local_shipping' },
-                { id: 'suggestions', label: 'Suggestions', icon: 'tips_and_updates' }
+                { id: 'suggestions', label: 'Suggestions', icon: 'tips_and_updates' },
+                { id: 'mpba_technical', label: 'Técnico MP-BA', icon: 'gavel' }
               ].map((item) => (
                 <button
                   key={item.id}
@@ -794,29 +808,59 @@ export default function App() {
               )}
             </motion.div>
           ) : mainView === "results" ? (
-          <ResultsView shipments={filteredShipments} onDrilldown={handleSuggestionsDrilldown} />
+          <ErrorBoundary fallbackTitle="Results View Error">
+            <ResultsView shipments={filteredShipments} onDrilldown={handleSuggestionsDrilldown} />
+          </ErrorBoundary>
+        ) : mainView === "demurrage_control" ? (
+          <ErrorBoundary fallbackTitle="Demurrage Control View Error">
+            <DemurrageControlView shipments={filteredShipments} />
+          </ErrorBoundary>
         ) : mainView === "bonded_dwell_optimization" ? (
-          <BondedDwellOptimization shipments={filteredShipments} onDrilldown={handleSuggestionsDrilldown} />
+          <ErrorBoundary fallbackTitle="Bonded Dwell Optimization Error">
+            <BondedDwellOptimization shipments={filteredShipments} onDrilldown={handleSuggestionsDrilldown} />
+          </ErrorBoundary>
         ) : mainView === "shipowners" ? (
-            <ShipownersView shipments={filteredShipments} />
+            <ErrorBoundary fallbackTitle="Shipowners View Error">
+              <ShipownersView shipments={filteredShipments} />
+            </ErrorBoundary>
           ) : mainView === "goods_analysis" ? (
-            <GoodsAnalysis data={charts} shipments={filteredShipments} />
+            <ErrorBoundary fallbackTitle="Goods Analysis View Error">
+              <GoodsAnalysis data={charts} shipments={filteredShipments} />
+            </ErrorBoundary>
           ) : mainView === "current_inventory" ? (
-            <CurrentInventory shipments={filteredShipments} />
+            <ErrorBoundary fallbackTitle="Current Inventory View Error">
+              <CurrentInventory shipments={filteredShipments} />
+            </ErrorBoundary>
         ) : mainView === "vessel_matrix" ? (
-          <div className="space-y-6 flex-1 min-h-[500px] flex flex-col">
-            <VesselMatrix shipments={filteredShipments} />
-          </div>
+          <ErrorBoundary fallbackTitle="Vessel Matrix View Error">
+            <div className="space-y-6 flex-1 min-h-[500px] flex flex-col">
+              <VesselMatrix shipments={filteredShipments} />
+            </div>
+          </ErrorBoundary>
         ) : mainView === "port_yard_status" ? (
-          <PortYardOperationStatus shipments={filteredShipments} onMonthClick={handleMonthDrilldown} />
+          <ErrorBoundary fallbackTitle="Port Yard Operation Status Error">
+            <PortYardOperationStatus shipments={filteredShipments} onMonthClick={handleMonthDrilldown} />
+          </ErrorBoundary>
         ) : mainView === "warehouse_distribution" ? (
-          <WarehouseDistribution shipments={filteredShipments} />
+          <ErrorBoundary fallbackTitle="Warehouse Distribution Error">
+            <WarehouseDistribution shipments={filteredShipments} />
+          </ErrorBoundary>
         ) : mainView === "general_warehouse_distribution" ? (
-          <GeneralWarehouseDistribution shipments={filteredShipments} />
+          <ErrorBoundary fallbackTitle="General Warehouse Distribution Error">
+            <GeneralWarehouseDistribution shipments={filteredShipments} />
+          </ErrorBoundary>
         ) : mainView === "deliveries" ? (
-          <DeliveriesView shipments={filteredShipments} />
+          <ErrorBoundary fallbackTitle="Deliveries View Error">
+            <DeliveriesView shipments={filteredShipments} />
+          </ErrorBoundary>
         ) : mainView === "suggestions" ? (
-          <LogisticsSuggestions shipments={filteredShipments} onDrilldown={handleSuggestionsDrilldown} />
+          <ErrorBoundary fallbackTitle="Logistics Suggestions Error">
+            <LogisticsSuggestions shipments={filteredShipments} onDrilldown={handleSuggestionsDrilldown} />
+          </ErrorBoundary>
+        ) : mainView === "mpba_technical" ? (
+          <ErrorBoundary fallbackTitle="MP-BA Technical Dossier View Error">
+            <MpbaTechnicalView shipments={filteredShipments} />
+          </ErrorBoundary>
         ) : null}
         </AnimatePresence>
       </main>
@@ -863,7 +907,11 @@ export default function App() {
         )}
       </AnimatePresence>
       </div>
-      {!isExporting && <EmptyContainersPanel isMinimized={isStoragePanelMinimized} onToggleMinimize={() => setIsStoragePanelMinimized(!isStoragePanelMinimized)} />}
+      {!isExporting && (
+        <ErrorBoundary fallbackTitle="Empty Containers Panel Error">
+          <EmptyContainersPanel isMinimized={isStoragePanelMinimized} onToggleMinimize={() => setIsStoragePanelMinimized(!isStoragePanelMinimized)} />
+        </ErrorBoundary>
+      )}
       </div>
     </div>
   );
